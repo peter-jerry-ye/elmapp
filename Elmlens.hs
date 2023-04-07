@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE DerivingStrategies         #-}
 {-# LANGUAGE TypeFamilies               #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings          #-}
 
 -- Following is not needed in GHC 2021
 {-# LANGUAGE ExistentialQuantification  #-}
@@ -24,6 +24,7 @@ module Elmlens where
 import           Control.Category (Category (..))
 import           Data.Kind        (Type)
 import           Data.Proxy       (Proxy (..))
+import           Data.List (elemIndex)
 import           Prelude          hiding (id, (.))
 
 import           Miso             hiding (View)
@@ -155,6 +156,7 @@ data AtomicListMsg model msg
   = ALIns Int model
   | ALDel Int
   | ALRep Int msg
+  | ALReorder (Int -> Int)
 
 -- For simplicity, we treat out-of-bound updates as identity updates
 actAtomicListMsg :: UpdateStructure u => Proxy u -> [ Model u ] -> AtomicListMsg (Model u) (Msg u) -> [ Model u ]
@@ -166,6 +168,7 @@ actAtomicListMsg _ xs0 (ALDel i) = case splitAt i xs0 of
         (xs, _:ys) -> xs ++ ys
 actAtomicListMsg _ xs0 (ALIns i a) = case splitAt i xs0 of
         (xs, ys) -> xs ++ a : ys
+actAtomicListMsg _ xs0 (ALReorder f) = fmap (\i -> xs0 !! f i) [0..(length xs0)]
 
 instance UpdateStructure u => UpdateStructure (ListU u) where
   type Model (ListU u) = [ Model u ]
@@ -194,6 +197,7 @@ mapL l = ULens { get = map (get l), trans = tr, create = map (create l) }
     trA xs (ALRep i da) = case splitAt i xs of
       (_xs1 , [] )      -> mempty
       (_xs1, xi : _xs2) -> [ALRep i (trans l xi da)]
+    trA _ (ALReorder f) = [ALReorder f]
 
 list :: forall u uv v. UpdateStructure u => ElmApp u uv v -> ElmApp (ListU u) (ListU uv) (ListV v)
 list (ElmApp lens h) =
@@ -218,6 +222,9 @@ filterList predicate  = vmap' viewFilteredList
     f n ls (ALRep i da : dbs) = case splitAt i ls of
       (_xs1, []) -> f n ls dbs
       (_xs1, xi : _xs2) -> ALRep xi da : f n ls dbs
+    f n ls (ALReorder reorder : dbs) = ALReorder (\i -> case elemIndex i ls of
+      Just m -> ls !! reorder m
+      Nothing -> i) : f n ls dbs
 
 conditional :: forall u uv v. UpdateStructure u => (Model uv -> Bool) -> ElmApp u uv v -> ElmApp u uv v -> ElmApp u uv v
 conditional predicate (ElmApp lens v1) (ElmApp _ v2) = ElmApp lens (\s -> if predicate s then v1 s else v2 s)
