@@ -1,11 +1,12 @@
+-- Implemented according to https://github.com/krausest/js-framework-benchmark/blob/master/frameworks/non-keyed/elm/src/Main.elm
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies      #-}
 
-module BenchBase where
+module Benchbase where
 
 import Miso
 import qualified Miso.Html as H
-import Miso.String (MisoString, unwords)
+import Miso.String (MisoString, unwords, pack)
 import System.Random
 import Prelude hiding (unwords)
 
@@ -75,18 +76,19 @@ data Msg =
   | Swap
   | Remove Int
   | Select Int
+  | NoOp
 
 data Row = Row {
   ident :: Int,
   label :: MisoString
-}
+} deriving (Eq)
 
 data Model = Model {
   seed :: StdGen,
   rows :: [ Row ],
   lastId :: Int,
   selectedId :: Int
-}
+} deriving (Eq)
 
 appendRandomEntries :: Int -> Int -> ([ Row ], StdGen) -> ([ Row ], StdGen)
 appendRandomEntries amount lastId (rows, seed) = 
@@ -137,9 +139,62 @@ updateModel msg model =
           (hd', to : tl') -> noEff (model { rows = hd ++ to : (hd' ++ from : tl') })
     Remove id -> noEff (model { rows = filter (\r -> ident r /= id) (rows model)})
     Select id -> noEff (model { selectedId = id })
+    NoOp -> noEff model
+
+buttons = [
+  ("run", "Create 1,000 rows", Create 1000),
+  ("runlots", "Create 10,000 rows", Create 10000),
+  ("add", "Append 1,000 rows", AppendOneThousand),
+  ("update", "Update every 10th row", UpdateEveryTenth),
+  ("clear", "Clear", Clear),
+  ("swaprows", "Swap Rows", Swap) ]
+
+btnPrimaryBlock :: ( MisoString, MisoString, Msg ) -> View Msg
+btnPrimaryBlock (buttonId, labelText, msg) = 
+  H.div_ [ class_ "col-sm-6 smallpad" ]
+         [ H.button_ [ H.type_ "button",
+                       H.class_ "btn btn-primary btn-block",
+                       H.id_ buttonId,
+                       H.onClick msg,
+                       H.textProp "ref" "text"]
+                     [ H.text labelText ]]
+
+viewRow :: Int -> Row -> View Msg
+viewRow selectedId row =
+  let ident_ = ident row
+      label_ = label row in
+  H.tr_ [ H.classList_ [ ("danger", selectedId == ident_)]]
+        [ H.td_ colMd1 [ H.text (pack $ show ident_) ],
+          H.td_ colMd4 [ H.a_ [ H.onClick (Select ident_) ] [ H.text label_ ]],
+          H.td_ colMd1 [ H.a_ [ H.onClick (Remove ident_) ] removeIcon ],
+          spacer]
+  where colMd1 = [ H.class_ "col-md-1" ]
+        colMd4 = [ H.class_ "col-md-4" ]
+        spacer = H.td_ [ H.class_ "col-md-6" ] []
+        removeIcon = [ H.span_ [ H.class_ "glyphicon glyphicon-remove",
+                                 H.boolProp "aria-hidden" True] [] ]
 
 viewModel :: Model -> View Msg
-viewModel = undefined
+viewModel model = 
+  H.div_ containerClasses
+         [ jumbotron,
+           H.table_ tableClasses
+                    [ H.tbody_ [] (foldr (f (selectedId model)) [] (rows model))],
+           footer]
+  where
+    containerClasses = [ H.class_ "container" ]
+    tableClasses = [ H.class_ "table table-hover table-striped test-data" ]
+    footer = H.span_ [ H.class_ "preloadicon glyphicon glyphicon-remove",
+                       H.boolProp "aria-hidden" True] []
+    jumbotron = H.div_ [ H.class_ "jumbotron" ]
+                       [ H.div_ [ H.class_ "row" ]
+                                [ H.div_ [ H.class_ "col-md-6" ]
+                                         [ H.h1_ [] [ text "Miso (non-keyed)" ]],
+                                  H.div_ [ H.class_ "col-md-6" ]
+                                         (fmap btnPrimaryBlock buttons)]]
+    f :: Int -> Row -> [ View Msg ] -> [ View Msg ]
+    f selectedId row elems = viewRow selectedId row : elems
+    
 
 benchbaseApp :: StdGen -> App Model Msg
 benchbaseApp seed = App {
@@ -148,7 +203,7 @@ benchbaseApp seed = App {
   view = viewModel,
   subs = [],
   events = defaultEvents,
-  initialAction = Clear,
+  initialAction = NoOp,
   mountPoint = Nothing,
   logLevel = Off
 }
