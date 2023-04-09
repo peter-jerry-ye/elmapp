@@ -14,6 +14,6 @@ executable app
   default-language:  Haskell2010
 
 library
-  exposed-modules:   Elmlens, Apps, Todo, Benchmark
-  build-depends:     base, miso
+  exposed-modules:   Elmlens, Apps, Todo, Benchmark, Benchbase
+  build-depends:     base, miso, random
   default-language:  Haskell2010
