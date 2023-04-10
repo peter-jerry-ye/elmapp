@@ -141,7 +141,7 @@ vmap f (ElmApp l h) = ElmApp l (f . h)
 vmap' :: ViewType v' => ((Model uv -> View v (Msg uv)) -> (Model uv -> View v' (Msg uv))) -> ElmApp u uv v -> ElmApp u uv v'
 vmap' f (ElmApp l h) = ElmApp l (f h)
 
-vmix :: UpdateStructure u => ElmApp u uv v -> ElmApp u uv v' -> ElmApp u (ProdU uv uv) (ProdV v v')
+vmix :: UpdateStructure u => ElmApp u uv v -> ElmApp u uv' v' -> ElmApp u (ProdU uv uv') (ProdV v v')
 vmix e1 e2 = lmap (splitL id id) $ product e1 e2
 
 
@@ -168,7 +168,7 @@ actAtomicListMsg _ xs0 (ALDel i) = case splitAt i xs0 of
         (xs, _:ys) -> xs ++ ys
 actAtomicListMsg _ xs0 (ALIns i a) = case splitAt i xs0 of
         (xs, ys) -> xs ++ a : ys
-actAtomicListMsg _ xs0 (ALReorder f) = fmap (\i -> xs0 !! f i) [0..(length xs0)]
+actAtomicListMsg _ xs0 (ALReorder f) = fmap (\i -> xs0 !! f i) [0..(length xs0 - 1)]
 
 instance UpdateStructure u => UpdateStructure (ListU u) where
   type Model (ListU u) = [ Model u ]
