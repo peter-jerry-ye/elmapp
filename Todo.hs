@@ -8,7 +8,7 @@ import Data.Kind        (Type)
 import Control.Category (Category (..))
 import Miso hiding (View)
 import qualified Miso.Html as H
-import Miso.String
+import Miso.String hiding (filter)
 import Data.Semigroup   (Sum (..))
 import Data.List        (zipWith)
 import Prelude hiding (id, product, (.))
@@ -88,9 +88,12 @@ taskFilterSwitch = fromView view
       H.input_ [ H.type_ "radio", H.checked_ $ filter == Done, H.onChange $ \_ -> Replace Done ],
       H.label_ [] [ text "Done" ] ]
 
-allTasks = filterList (const True) tasks
-doingTasks = filterList (not . fst) tasks
-doneTasks = filterList fst tasks
+allTasks = vmap' f tasks
+  where f view = \(ls1, ls2) -> view (ls1, ls2)
+doingTasks = vmap' f tasks
+  where f view = \(ls1, ls2) -> view (filter (not . fst) ls1, filter (not . fst) ls2)
+doneTasks = vmap' f tasks
+  where f view = \(ls1, ls2) -> view (filter fst ls1, filter fst ls2)
 
 filteredTasks = 
   conditional (\(filter, _) -> filter == DisplayAll)

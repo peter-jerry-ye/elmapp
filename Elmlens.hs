@@ -25,7 +25,7 @@ import           Control.Category (Category (..))
 import           Data.Kind        (Type)
 import           Data.Proxy       (Proxy (..))
 import           Data.List (elemIndex)
-import           Prelude          hiding (id, (.))
+import           Prelude          hiding (id, (.), product)
 
 import           Miso             hiding (View)
 import qualified Miso.Html        as H
@@ -141,8 +141,8 @@ vmap f (ElmApp l h) = ElmApp l (f . h)
 vmap' :: ViewType v' => ((Model uv -> View v (Msg uv)) -> (Model uv -> View v' (Msg uv))) -> ElmApp u uv v -> ElmApp u uv v'
 vmap' f (ElmApp l h) = ElmApp l (f h)
 
-vmix :: ElmApp u uv v -> ElmApp u uv v' -> ElmApp u uv (ProdV v v')
-vmix (ElmApp l h) (ElmApp _ h') = ElmApp l $ \s -> Pair (h s) (h' s)
+vmix :: UpdateStructure u => ElmApp u uv v -> ElmApp u uv v' -> ElmApp u (ProdU uv uv) (ProdV v v')
+vmix e1 e2 = lmap (splitL id id) $ product e1 e2
 
 
 product :: forall u1 uv1 v1 u2 uv2 v2. ElmApp u1 uv1 v1 -> ElmApp u2 uv2 v2 -> ElmApp (ProdU u1 u2) (ProdU uv1 uv2) (ProdV v1 v2)
