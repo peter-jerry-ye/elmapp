@@ -25,11 +25,14 @@ import           Control.Category (Category (..))
 import           Data.Kind        (Type)
 import           Data.Proxy       (Proxy (..))
 import           Data.List (elemIndex)
+import qualified Data.Sequence    as S
+import           Data.Sequence    (Seq((:|>), (:<|)), (><), (|>), (<|))
 import           Prelude          hiding (id, (.), product)
 
 import           Miso             hiding (View)
 import qualified Miso.Html        as H
 import           Miso.String      (MisoString)
+import Data.Foldable (toList)
 
 -- Update Structure
 class Monoid (Msg u) => UpdateStructure (u :: Type) where
@@ -159,19 +162,30 @@ data AtomicListMsg model msg
   | ALReorder (Int -> Int)
 
 -- For simplicity, we treat out-of-bound updates as identity updates
-actAtomicListMsg :: UpdateStructure u => Proxy u -> [ Model u ] -> AtomicListMsg (Model u) (Msg u) -> [ Model u ]
-actAtomicListMsg pu xs0 (ALRep i msg) = case splitAt i xs0 of
-        (xs, [])   -> xs
-        (xs, y:ys) -> xs ++ act pu y msg : ys
-actAtomicListMsg _ xs0 (ALDel i) = case splitAt i xs0 of
-        (xs, [])   -> xs
-        (xs, _:ys) -> xs ++ ys
-actAtomicListMsg _ xs0 (ALIns i a) = case splitAt i xs0 of
-        (xs, ys) -> xs ++ a : ys
-actAtomicListMsg _ xs0 (ALReorder f) = fmap (\i -> xs0 !! f i) [0..(length xs0 - 1)]
+-- actAtomicListMsg :: UpdateStructure u => Proxy u -> Seq (Model u) -> AtomicListMsg (Model u) (Msg u) -> Seq (Model u)
+-- actAtomicListMsg pu xs0 (ALRep i msg) = case splitAt i xs0 of
+--         (xs, [])   -> xs
+--         (xs, y:ys) -> xs ++ act pu y msg : ys
+-- actAtomicListMsg _ xs0 (ALDel i) = case splitAt i xs0 of
+--         (xs, [])   -> xs
+--         (xs, _:ys) -> xs ++ ys
+-- actAtomicListMsg _ xs0 (ALIns i a) = case splitAt i xs0 of
+--         (xs, ys) -> xs ++ a : ys
+-- actAtomicListMsg _ xs0 (ALReorder f) = fmap (\i -> xs0 !! f i) [0..(length xs0 - 1)]
+
+actAtomicListMsg :: UpdateStructure u => Proxy u -> Seq (Model u) -> AtomicListMsg (Model u) (Msg u) -> Seq (Model u)
+actAtomicListMsg pu xs0 (ALRep i msg) = case S.splitAt i xs0 of
+        (xs, S.Empty)  -> xs
+        (xs, y :<| ys) -> xs >< act pu y msg <| ys
+actAtomicListMsg _ xs0 (ALDel i) = case S.splitAt i xs0 of
+        (xs, S.Empty)  -> xs
+        (xs, _ :<| ys) -> xs >< ys
+actAtomicListMsg _ xs0 (ALIns i a) = case S.splitAt i xs0 of
+        (xs, ys) -> xs >< a <| ys
+actAtomicListMsg _ xs0 (ALReorder f) = fmap (\i -> xs0 `S.index` f i) (S.iterateN (length xs0) (+1) 0)
 
 instance UpdateStructure u => UpdateStructure (ListU u) where
-  type Model (ListU u) = [ Model u ]
+  type Model (ListU u) = S.Seq (Model u)
   type Msg (ListU u) = [ AtomicListMsg (Model u) (Msg u) ]
 
   act _ = foldl (actAtomicListMsg (Proxy @u))
@@ -185,7 +199,7 @@ instance Functor (View v) => Functor (View (ListV v)) where
   fmap f (ViewList xs) = ViewList $ map (fmap f) xs
 
 mapL :: forall u1 u2. UpdateStructure u1 => ULens u1 u2 -> ULens (ListU u1) (ListU u2)
-mapL l = ULens { get = map (get l), trans = tr, create = map (create l) }
+mapL l = ULens { get = fmap (get l), trans = tr, create = fmap (create l) }
   where
     tr :: Model (ListU u1) -> Msg (ListU u2) -> Msg (ListU u1)
     tr _ []         = mempty
@@ -194,9 +208,9 @@ mapL l = ULens { get = map (get l), trans = tr, create = map (create l) }
     trA :: Model (ListU u1) -> AtomicListMsg (Model u2) (Msg u2) -> Msg (ListU u1)
     trA _ (ALIns i a)   = [ALIns i (create l a)]
     trA _ (ALDel i)     = [ALDel i]
-    trA xs (ALRep i da) = case splitAt i xs of
-      (_xs1 , [] )      -> mempty
-      (_xs1, xi : _xs2) -> [ALRep i (trans l xi da)]
+    trA xs (ALRep i da) = case S.splitAt i xs of
+      (_xs1, S.Empty)     -> mempty
+      (_xs1, xi :<| _xs2) -> [ALRep i (trans l xi da)]
     trA _ (ALReorder f) = [ALReorder f]
 
 list :: forall u uv v. UpdateStructure u => ElmApp u uv v -> ElmApp (ListU u) (ListU uv) (ListV v)
@@ -204,13 +218,13 @@ list (ElmApp lens h) =
   ElmApp (mapL lens) viewList
   where
     viewList :: Model (ListU uv) -> View (ListV v) (Msg (ListU uv))
-    viewList xs = ViewList $ zipWith (\x i -> fmap (\msg -> [ALRep i msg]) $ h x) xs [0..]
+    viewList xs = ViewList $ zipWith (\x i -> fmap (\msg -> [ALRep i msg]) $ h x) (toList xs) [0..]
 
 filterList :: forall u uv v. (ViewType v, UpdateStructure u) => (Model uv -> Bool) -> ElmApp u (ListU uv) v -> ElmApp u (ListU uv) v
 filterList predicate  = vmap' viewFilteredList
   where
     viewFilteredList ::  (Model (ListU uv) -> View v (Msg (ListU uv))) -> Model (ListU uv) -> View v (Msg (ListU uv))
-    viewFilteredList h ls = fmap (f (length ls) (fmap snd $ filter (\(x, _) -> predicate x) $ zip ls [0..])) (h $ filter predicate ls)
+    viewFilteredList h ls = fmap (f (length ls) (fmap snd $ filter (\(x, _) -> predicate x) $ zip (toList ls) [0..])) (h $ S.filter predicate ls)
     f :: Int -> [ Int ] -> Msg (ListU uv) -> Msg (ListU uv)
     f _n _ls [] = []
     f n ls (ALIns i a : dbs) = case splitAt i ls of 

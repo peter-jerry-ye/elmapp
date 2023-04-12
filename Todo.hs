@@ -10,10 +10,12 @@ import Miso hiding (View)
 import qualified Miso.Html as H
 import Miso.String hiding (filter)
 import Data.Semigroup   (Sum (..))
+import qualified Data.Sequence as S
 import Data.List        (zipWith)
 import Prelude hiding (id, product, (.))
 import Elmlens
 import Apps
+import Data.Foldable (toList)
 
 data TaskInputU
 
@@ -50,7 +52,7 @@ taskRow = vmap f (product checkButton taskInput)
 deleteButtons = fromView view
   where
     view :: Model (ListU (ProdU BoolU TaskInputU)) -> View (ListV HTML) (Msg (ListU (ProdU BoolU TaskInputU)))
-    view list = ViewList $ Data.List.zipWith (\index _ -> Base $ H.button_ [ H.onClick [ ALDel index ] ] [ H.text "Delete" ]) [0..] list
+    view list = ViewList $ toList $ S.mapWithIndex (\index _ -> Base $ H.button_ [ H.onClick [ ALDel index ] ] [ H.text "Delete" ]) list
 
 tasks = vmap f $ vmix (list taskRow) deleteButtons
   where
@@ -67,7 +69,7 @@ todoWithoutFilter = vmap f $ lmap (splitL id (proj2L "")) $ product newTask task
   where
     f (Pair v1 (ViewList v2)) = Base $ H.div_ [] $ fmap (\(Base h) -> h) (v1 : v2)
 
-todoWithoutFilterApp = render todoWithoutFilter ("", [])
+todoWithoutFilterApp = render todoWithoutFilter ("", S.Empty)
 
 data TaskFilter = 
     DisplayAll
@@ -91,9 +93,9 @@ taskFilterSwitch = fromView view
 allTasks = vmap' f tasks
   where f view = \(ls1, ls2) -> view (ls1, ls2)
 doingTasks = vmap' f tasks
-  where f view = \(ls1, ls2) -> view (filter (not . fst) ls1, filter (not . fst) ls2)
+  where f view = \(ls1, ls2) -> view (S.filter (not . fst) ls1, S.filter (not . fst) ls2)
 doneTasks = vmap' f tasks
-  where f view = \(ls1, ls2) -> view (filter fst ls1, filter fst ls2)
+  where f view = \(ls1, ls2) -> view (S.filter fst ls1, S.filter fst ls2)
 
 filteredTasks = 
   conditional (\(filter, _) -> filter == DisplayAll)
@@ -107,5 +109,5 @@ todomvc = vmap f $ lmap (splitL (productL id (proj2L DisplayAll)) (proj2L "") ) 
     f (Pair (Base inputV) (Pair (Base filterV) (ViewList tasksV))) = 
         Base $ H.div_ [] $ [ inputV, filterV ] ++ fmap (\(Base v) -> v) tasksV
 
-todomvcapp = render todomvc ("", (DisplayAll, []))
+todomvcapp = render todomvc ("", (DisplayAll, S.Empty))
 

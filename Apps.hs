@@ -10,6 +10,7 @@ import Miso hiding (View)
 import qualified Miso.Html as H
 import Miso.String
 import Data.Semigroup   (Sum (..))
+import qualified Data.Sequence as S
 import Data.List        (zipWith)
 import Prelude hiding (id, product, (.))
 import Elmlens
@@ -70,7 +71,7 @@ highlightDemo = vmap f $ lmap (splitL (proj2L 0) id) $ product (list highlightBu
     f (Pair (ViewList buttons) (ViewList properties)) = 
       Base $ H.div_ [] ((\(Base h) -> h) <$> Prelude.zipWith (\(Holed template) ps -> template id ps) buttons properties)
 
-highlightDemoApp = render highlightDemo (0, [(), (), (), (), ()])
+highlightDemoApp = render highlightDemo (0, S.fromList [(), (), (), (), ()])
 
 data Menu msg = Menu {
   selectedItem :: Maybe String,

@@ -10,11 +10,13 @@ import Miso hiding (View)
 import qualified Miso.Html as H
 import Miso.String      (MisoString, unwords, pack)
 import Data.Semigroup   (Sum (..))
+import qualified Data.Sequence as S
 import Data.List (zipWith4)
 import System.Random
 import Prelude hiding (id, product, (.), unwords)
 import Elmlens
 import Apps
+import Data.Foldable (toList)
 
 adjectives :: [ MisoString ]
 adjectives = [
@@ -104,39 +106,45 @@ buttonsConfig = [
               Nothing -> mempty
               Just _ -> (Replace $ index + 1000, (Replace newGen, replicate (length ls) (ALDel 0) ++ zipWith ALIns [0..] newRows)) 
                 where (newRows, newGen) = generateRows 1000 index ([], gen),
-            create = const (0, (mkStdGen 0, []))}),
+            -- create = const (0, (mkStdGen 0, []))}),
+            create = const (0, (mkStdGen 0, S.Empty))}),
   ("runlots", "Create 10,000 rows",
     ULens { get = const (),
             trans = \(index, (gen, ls)) m -> case m of
               Nothing -> mempty
               Just _ -> (Replace $ index + 10000, (Replace newGen, replicate (length ls) (ALDel 0) ++ zipWith ALIns [0..] newRows)) 
                 where (newRows, newGen) = generateRows 10000 index ([], gen),
-            create = const (0, (mkStdGen 0, []))}),
+            -- create = const (0, (mkStdGen 0, []))}),
+            create = const (0, (mkStdGen 0, S.Empty))}),
   ("add", "Append 1,000 rows",
     ULens { get = const (),
             trans = \(index, (gen, ls)) m -> case m of
               Nothing -> mempty
               Just _ -> (Replace $ index + 1000, (Replace newGen, zipWith ALIns [(length ls)..] newRows)) 
                 where (newRows, newGen) = generateRows 1000 index ([], gen),
-            create = const (0, (mkStdGen 0, []))}),
+            -- create = const (0, (mkStdGen 0, []))}),
+            create = const (0, (mkStdGen 0, S.Empty))}),
   ("update", "Update every 10th row", 
     ULens { get = const (), 
             trans = \(_, (_, ls)) m -> case m of 
               Nothing -> mempty
               Just _  -> (mempty, (mempty, [ ALRep i (mempty, " !!!") | i <- [0 .. (length ls)], i `mod` 10 == 0])),
-            create = const (0, (mkStdGen 0, []))}),
+            -- create = const (0, (mkStdGen 0, []))}),
+            create = const (0, (mkStdGen 0, S.Empty))}),
   ("clear", "Clear", 
     ULens { get = const (),
             trans = \(_, (_, ls)) m -> case m of
               Nothing -> mempty
               Just _  -> (mempty, (mempty, replicate (length ls) (ALDel 0))),
-            create = const (0, (mkStdGen 0, []))}),
+            -- create = const (0, (mkStdGen 0, []))}),
+            create = const (0, (mkStdGen 0, S.Empty))}),
   ("swaprows", "Swap Rows", 
     ULens { get = const (),
             trans = \(_, (_, ls)) m -> case m of
               Nothing -> mempty
               Just _  -> (mempty, (mempty, [ if length ls >= 999 then ALReorder (\i -> if i == 1 then 998 else if i == 998 then 1 else i) else ALReorder id ])),
-            create = const (0, (mkStdGen 0, []))})]
+            -- create = const (0, (mkStdGen 0, []))})]
+            create = const (0, (mkStdGen 0, S.Empty))})]
 
 -- TODO When a button is clicked multiple times, will the message be truncated into one?
 
@@ -185,7 +193,7 @@ jumbotronTemplate = fromView $ \_ ->  Holed (\_f (ViewList buttons) ->
                             H.div_ [ H.class_ "col-md-6"] (fmap (\(Base b) -> b) buttons) ]]))
 
 jumbotron = vmap (\(Pair (Holed template) (Pair h1 (Pair h2 (Pair h3 (Pair h4 (Pair h5 h6)))))) -> template id $ ViewList [h1, h2, h3, h4, h5, h6] ) 
-  $ lmap (splitL (unitL (0, (mkStdGen 0, []))) id) $ product jumbotronTemplate buttons
+  $ lmap (splitL (unitL (0, (mkStdGen 0, S.Empty))) id) $ product jumbotronTemplate buttons
 
 deletes :: UpdateStructure u => ElmApp (ListU u) (ListU u) (ListV HTML)
 deletes = fromView $ \ls -> ViewList $ fmap (\i -> Base $ 
@@ -196,7 +204,7 @@ deletes = fromView $ \ls -> ViewList $ fmap (\i -> Base $
 highlights :: ElmApp (ProdU (RepU Int) (ListU (ProdU (RepU Int) LabelU)))
                      (ProdU (RepU Int) (ListU (ProdU (RepU Int) LabelU)))
                      (ListV (ProdV Attr HTML))
-highlights = fromView $ \(selected, ls) -> ViewList $ fmap (\(id, label) -> 
+highlights = fromView $ \(selected, ls) -> ViewList $ toList $ fmap (\(id, label) -> 
     Pair ( Property $ H.classList_ [ ("danger", selected == id) ])
          ( Base $ H.a_ [H.onClick (Replace id, mempty)] [ text label ]) )
     ls
@@ -216,7 +224,7 @@ rowTemplate = fromView $ \_ ->
 tableTemplate = list rowTemplate
 
 rows :: ElmApp (ListU (ProdU (RepU Int) LabelU)) (ListU (ProdU (RepU Int) LabelU)) (ListV (ProdV HTML HTML))
-rows = fromView $ \ls -> ViewList $ fmap (\(index, label) -> Pair (Base $ H.text $ pack $ show index) (Base $ H.text label)) ls
+rows = fromView $ \ls -> ViewList $ toList $ fmap (\(index, label) -> Pair (Base $ H.text $ pack $ show index) (Base $ H.text label)) ls
 
 table = vmap mapView $ lmap (splitL id (proj2L 0)) $ product highlights (lmap (splitL id (mapL (unitL (0, "")))) $ product (vmix rows deletes) tableTemplate)
   where
@@ -238,11 +246,11 @@ template = fromView $ \_ -> Holed (\_f (Base jumbotron) -> Holed (\f1 (ViewList 
                       H.span_ [ H.class_ "preloadicon glyphicon glyphicon-remove",
                                 H.boolProp "aria-hidden" True ] [] ]]))
 
-benchmark = vmap f $ lmap (splitL id (unitL (0, (mkStdGen 0, (0, []))))) $ product (lmap (splitL (productL id (productL id (proj2L 0))) (proj2L (mkStdGen 0) . proj2L 0)) $ product jumbotron table) template
+benchmark = vmap f $ lmap (splitL id (unitL (0, (mkStdGen 0, (0, S.Empty))))) $ product (lmap (splitL (productL id (productL id (proj2L 0))) (proj2L (mkStdGen 0) . proj2L 0)) $ product jumbotron table) template
   where
     f :: View (ProdV (ProdV HTML (ListV HTML)) (HTML :~> (ListV HTML :~> HTML))) m -> View HTML m
     f (Pair (Pair jumbo rows) (Holed template)) =
       let Holed template2 = template id jumbo
       in template2 id rows
 
-benchmarkApp seed = render benchmark (0, (seed, (-1, [])))
+benchmarkApp seed = render benchmark (0, (seed, (-1, S.Empty)))
