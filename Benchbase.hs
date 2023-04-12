@@ -1,11 +1,15 @@
 -- Implemented according to https://github.com/krausest/js-framework-benchmark/blob/master/frameworks/non-keyed/elm/src/Main.elm
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies      #-}
+{-# LANGUAGE StrictData #-}
 
 module Benchbase where
 
 import Miso
 import qualified Miso.Html as H
+-- import qualified Data.Vector as V
+import qualified Data.Sequence as S
+import Data.Sequence (Seq((:<|), (:|>)), (|>), (<|), (><))
 import Miso.String (MisoString, unwords, pack)
 import System.Random
 import Prelude hiding (unwords)
@@ -85,12 +89,14 @@ data Row = Row {
 
 data Model = Model {
   seed :: StdGen,
-  rows :: [ Row ],
+  -- rows :: V.Vector Row,
+  rows :: S.Seq Row,
   lastId :: Int,
   selectedId :: Int
 } deriving (Eq)
 
-appendRandomEntries :: Int -> Int -> ([ Row ], StdGen) -> ([ Row ], StdGen)
+-- appendRandomEntries :: Int -> Int -> (V.Vector Row, StdGen) -> (V.Vector Row, StdGen)
+appendRandomEntries :: Int -> Int -> (S.Seq Row, StdGen) -> (S.Seq Row, StdGen)
 appendRandomEntries amount lastId (rows, seed) = 
   if amount == 0 
     then (rows, seed) 
@@ -106,22 +112,28 @@ appendRandomEntries amount lastId (rows, seed) =
     colour = colours !! ic
     noun :: MisoString
     noun = nouns !! in_
-    newRows = rows ++ [ Row { ident = newId, label = unwords [adjective, colour, noun] } ]
+    -- newRows = V.snoc rows $ Row { ident = newId, label = unwords [adjective, colour, noun] } 
+    newRows = rows |> Row { ident = newId, label = unwords [adjective, colour, noun]}
 
-updateEveryTenth :: Int -> [ Row ] -> [ Row ]
+-- updateEveryTenth :: Int -> V.Vector Row -> V.Vector Row
+updateEveryTenth :: Int -> S.Seq Row -> S.Seq Row
 updateEveryTenth index rows =
-  case splitAt index rows of
-    (_, [])       -> rows
-    (hd, row : tl) -> updateEveryTenth (index + 10) (hd ++ ((row { label = newLabel }) : tl))
-      where 
-        newLabel :: MisoString
-        newLabel = unwords [label row, "!!!"]
+  -- if V.null tl then hd
+  -- else updateEveryTenth (index + 10) (hd V.++ V.cons (row { label = newLabel }) (V.tail tl))
+  --   where 
+  --     (hd, tl) = V.splitAt index rows
+  --     row = V.head tl
+  --     newLabel = unwords [label row, "!!!"]
+  case S.splitAt index rows of
+    (hd, S.Empty) -> rows
+    (hd, row :<| tl) -> updateEveryTenth (index + 10) (hd >< row { label = unwords [label row, "!!!"] } <| tl)
 
 updateModel :: Msg -> Model -> Effect Msg Model
 updateModel msg model = 
   case msg of
     Create amount -> 
-      let (newRows, newSeed) = appendRandomEntries amount (lastId model) ( [], seed model )
+      -- let (newRows, newSeed) = appendRandomEntries amount (lastId model) ( V.empty, seed model )
+      let (newRows, newSeed) = appendRandomEntries amount (lastId model) (S.Empty, seed model)
       in noEff ( model { rows = newRows, seed = newSeed, lastId = lastId model + amount } )
     AppendOneThousand ->
       let 
@@ -130,14 +142,20 @@ updateModel msg model =
       in noEff ( model { rows = newRows, seed = newSeed, lastId = lastId model + amount} )
     UpdateEveryTenth ->
       noEff ( model { rows = updateEveryTenth 0 (rows model ) } )
-    Clear -> noEff (model { rows = [] })
+    -- Clear -> noEff (model { rows = V.empty })
+    Clear -> noEff (model { rows = S.Empty })
     Swap ->
-      case splitAt 1 (rows model) of
-        (_, []) -> noEff model
-        (hd, from : tl) -> case splitAt 996 tl of
-          (_, []) -> noEff model
-          (hd', to : tl') -> noEff (model { rows = hd ++ to : (hd' ++ from : tl') })
-    Remove id -> noEff (model { rows = filter (\r -> ident r /= id) (rows model)})
+      -- let (hd, tl) = V.splitAt 1 (rows model) in
+      --   if V.null tl then noEff model
+      --   else let (hd', tl') = V.splitAt 996 $ V.tail tl in
+      --          if V.null tl' then noEff model
+      --          else noEff (model { rows = V.concat [hd, V.singleton $ V.head tl, hd', V.singleton $ V.head tl', V.tail tl'] })
+        case S.splitAt 1 (rows model) of
+          (_, S.Empty) -> noEff model
+          (hd, from :<| tl) -> case S.splitAt 996 tl of
+            (_, S.Empty) -> noEff model
+            (hd', to :<| tl') -> noEff (model { rows = hd >< to <| hd' >< from <| tl' })
+    Remove id -> noEff (model { rows = S.filter (\r -> ident r /= id) (rows model)})
     Select id -> noEff (model { selectedId = id })
     NoOp -> noEff model
 
@@ -198,7 +216,7 @@ viewModel model =
 
 benchbaseApp :: StdGen -> App Model Msg
 benchbaseApp seed = App {
-  model = Model { seed = seed, rows = [], lastId = 0, selectedId = -1 },
+  model = Model { seed = seed, rows = S.Empty, lastId = 0, selectedId = -1 },
   update = updateModel,
   view = viewModel,
   subs = [],
