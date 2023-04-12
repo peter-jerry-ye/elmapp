@@ -150,6 +150,24 @@ btnPrimaryBlock buttonId label = fromView $ \_ -> Base $
                          H.textProp "ref" "text" ]
                        [ text label ] ]
 
+{-
+
+class Mixable x u uv v | x -> u, x -> uv, x -> v  where
+  mix :: x -> ElmApp u uv v 
+
+instance Mixable (ElmApp u1 uv1 v1) u1 uv1 v1 where 
+  mix = id 
+
+instance (Mixable a u1 uv1 v1, Mixable b u2 uv2 v2) => Mixable (a, b) (ProdU u1 u2) (ProdU uv1 uv1) (ProdV v1 v2) where
+  mix a b = vmix (mix a) (mix b)
+
+pattern a |> b = (a, b)
+infixr |> 4 
+
+mix (d1 |> d2 |> d3 |> d4 |> d5) ...
+
+-}
+
 -- buttons = fmap (\(buttonId, label, lens) -> lmap lens $ btnPrimaryBlock buttonId label) buttonsConfig
 buttons = vmix ((\(buttonId, label, lens) -> lmap lens $ btnPrimaryBlock buttonId label) $ head buttonsConfig)
         $ vmix ((\(buttonId, label, lens) -> lmap lens $ btnPrimaryBlock buttonId label) $ buttonsConfig !! 1)
@@ -165,12 +183,6 @@ jumbotronTemplate = fromView $ \_ ->  Holed (\_f (ViewList buttons) ->
                           [ H.div_ [ H.class_ "col-md-6" ]
                                    [ H.h1_ [] [ H.text "Elmlens (non-keyed)" ]],
                             H.div_ [ H.class_ "col-md-6"] (fmap (\(Base b) -> b) buttons) ]]))
-
--- jumbotron = vmap (\(Pair (Holed template) h) -> template id h ) $ lmap (splitL (unitL (0, (mkStdGen 0, []))) id) $ product jumbotronTemplate buttonList
---   where
---     buttonList = foldl1 f buttons
---     f :: ElmApp u uv1 HTML -> ElmApp u uv2 HTML -> ElmApp u (ProdU uv1 uv2) HTML
---     f e1 e2 = vmap (\(Pair v1 v2) -> v2) $ vmix e1 e2
 
 jumbotron = vmap (\(Pair (Holed template) (Pair h1 (Pair h2 (Pair h3 (Pair h4 (Pair h5 h6)))))) -> template id $ ViewList [h1, h2, h3, h4, h5, h6] ) 
   $ lmap (splitL (unitL (0, (mkStdGen 0, []))) id) $ product jumbotronTemplate buttons
