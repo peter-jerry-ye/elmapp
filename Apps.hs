@@ -32,7 +32,7 @@ counterApp :: Maybe MisoString -> App (Model IntU) (Msg IntU)
 counterApp = render counter 0
 
 data RepU (a :: Type)
-data ScratchMsg a = Replace a | Keep
+data ScratchMsg a = Replace a | Keep deriving Eq
 
 instance Semigroup (ScratchMsg a) where
   Keep <> b              = b
@@ -42,7 +42,7 @@ instance Semigroup (ScratchMsg a) where
 instance Monoid (ScratchMsg a) where
   mempty = Keep
 
-instance UpdateStructure (RepU a) where
+instance (Eq a) => UpdateStructure (RepU a) where
   type Model (RepU a) = a
   type Msg (RepU a) = ScratchMsg a
 
@@ -92,7 +92,7 @@ data MenuItem msg =
 
 data UnitU (a :: Type)
 
-instance Monoid a => UpdateStructure (UnitU a) where
+instance (Monoid a, Eq a) => UpdateStructure (UnitU a) where
   type Model (UnitU a) = ()
   type Msg (UnitU a) = a
 

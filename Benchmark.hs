@@ -15,6 +15,7 @@ import System.Random
 import Prelude hiding (id, product, (.), unwords)
 import Elmlens
 import Apps
+import Data.IntMap.Strict (fromList)
 
 adjectives :: [ MisoString ]
 adjectives = [
@@ -135,7 +136,7 @@ buttonsConfig = [
     ULens { get = const (),
             trans = \(_, (_, ls)) m -> case m of
               Nothing -> mempty
-              Just _  -> (mempty, (mempty, [ if length ls >= 999 then ALReorder (\i -> if i == 1 then 998 else if i == 998 then 1 else i) else ALReorder id ])),
+              Just _  -> (mempty, (mempty, [ ALReorder $ fromList [(1, 998), (998, 1)] ])),
             create = const (0, (mkStdGen 0, []))})]
 
 -- TODO When a button is clicked multiple times, will the message be truncated into one?

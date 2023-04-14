@@ -24,7 +24,7 @@ module Elmlens where
 import           Control.Category (Category (..))
 import           Data.Kind        (Type)
 import           Data.Proxy       (Proxy (..))
-import           Data.List (elemIndex)
+import           Data.IntMap.Strict (IntMap, fromList, foldlWithKey, toList)
 import           Prelude          hiding (id, (.), product)
 
 import           Miso             hiding (View)
@@ -32,12 +32,17 @@ import qualified Miso.Html        as H
 import           Miso.String      (MisoString)
 
 -- Update Structure
-class Monoid (Msg u) => UpdateStructure (u :: Type) where
+class (Monoid (Msg u), Eq (Model u), Eq (Msg u)) => UpdateStructure (u :: Type) where
   type Model u :: Type
   type Msg u :: Type
   -- NB: data Proxy (u :: k) = Proxy
   -- is used to determine type u
   act :: Proxy u -> Model u -> Msg u -> Model u
+
+class UpdateStructure u => MaskedUpdateStructure (u :: Type) where
+  type Mask u :: Type
+  mask :: Proxy u -> Msg u -> Mask u
+  (===) :: Proxy u -> Mask u -> Model u -> Model u -> Bool
 
 data ProdU u1 u2
 
@@ -45,13 +50,23 @@ instance (UpdateStructure u1, UpdateStructure u2) => UpdateStructure (ProdU u1 u
   type Model (ProdU u1 u2) = (Model u1, Model u2)
   type Msg (ProdU u1 u2) = (Msg u1, Msg u2)
 
-  act _ (msg1, msg2) (m1, m2) = (act (Proxy @u1) msg1 m1, act (Proxy @u2) msg2 m2)
+  act _ (m1, m2) (msg1, msg2) = (act (Proxy @u1) m1 msg1, act (Proxy @u2) m2 msg2)
 
 embFst :: (UpdateStructure u2) => Proxy u1 -> Proxy u2 -> Msg u1 ->  Msg (ProdU u1 u2)
 embFst _ _ m = (m, mempty)
 
 embSnd :: (UpdateStructure u1) => Proxy u1 -> Proxy u2 -> Msg u2 -> Msg (ProdU u1 u2)
 embSnd _ _ m = (mempty, m)
+
+data DupU u1 u2
+
+instance (UpdateStructure u1, UpdateStructure u2) => UpdateStructure (DupU u1 u2) where
+  type Model (DupU u1 u2) = (Model u1, Model u2)
+  type Msg (DupU u1 u2) = (Msg u1, Msg u2)
+
+  act _ (m1, m2) (msg1, msg2) = 
+    if msg1 /= mempty && msg2 /= mempty then error "inconsistent in DupU" 
+    else (act (Proxy @u1) m1 msg1, act (Proxy @u2) m2 msg2)
 
 
 data ULens u1 u2 =
@@ -156,7 +171,7 @@ data AtomicListMsg model msg
   = ALIns Int model
   | ALDel Int
   | ALRep Int msg
-  | ALReorder (Int -> Int)
+  | ALReorder (IntMap Int) deriving Eq
 
 -- For simplicity, we treat out-of-bound updates as identity updates
 actAtomicListMsg :: UpdateStructure u => Proxy u -> [ Model u ] -> AtomicListMsg (Model u) (Msg u) -> [ Model u ]
@@ -168,7 +183,9 @@ actAtomicListMsg _ xs0 (ALDel i) = case splitAt i xs0 of
         (xs, _:ys) -> xs ++ ys
 actAtomicListMsg _ xs0 (ALIns i a) = case splitAt i xs0 of
         (xs, ys) -> xs ++ a : ys
-actAtomicListMsg _ xs0 (ALReorder f) = fmap (\i -> xs0 !! f i) [0..(length xs0 - 1)]
+actAtomicListMsg _ xs0 (ALReorder f) = foldlWithKey (\ls key n -> case splitAt key ls of
+        (xs, []) -> xs
+        (xs, _:ys) -> xs ++ (xs0 !! n) : ys) xs0 f
 
 instance UpdateStructure u => UpdateStructure (ListU u) where
   type Model (ListU u) = [ Model u ]
@@ -222,9 +239,7 @@ filterList predicate  = vmap' viewFilteredList
     f n ls (ALRep i da : dbs) = case splitAt i ls of
       (_xs1, []) -> f n ls dbs
       (_xs1, xi : _xs2) -> ALRep xi da : f n ls dbs
-    f n ls (ALReorder reorder : dbs) = ALReorder (\i -> case elemIndex i ls of
-      Just m -> ls !! reorder m
-      Nothing -> i) : f n ls dbs
+    f n ls (ALReorder reorder : dbs) = ALReorder (fromList $ fmap (\(from, to) -> (ls !! from, ls !! to)) $ toList reorder) : f n ls dbs
 
 conditional :: forall u uv v. UpdateStructure u => (Model uv -> Bool) -> ElmApp u uv v -> ElmApp u uv v -> ElmApp u uv v
 conditional predicate (ElmApp lens v1) (ElmApp _ v2) = ElmApp lens (\s -> if predicate s then v1 s else v2 s)

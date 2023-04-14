@@ -21,7 +21,7 @@ data EditMsg =
     Focus
   | Cancel
   | Commit
-  | Edit MisoString
+  | Edit MisoString deriving Eq
 
 instance UpdateStructure TaskInputU where
   type Model TaskInputU = (MisoString, Maybe MisoString)
