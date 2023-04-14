@@ -29,6 +29,6 @@ executable benchmark
   hs-source-dirs:    benchmark
 
 library
-  exposed-modules:   Elmlens, Apps, Todo, Benchmark, Benchbase
+  exposed-modules:   Elmlens, ElmlensProp, Apps, Todo, Benchmark, Benchbase
   build-depends:     base, miso, random, containers
   default-language:  Haskell2010

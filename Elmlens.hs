@@ -42,7 +42,7 @@ class (Monoid (Msg u), Eq (Model u), Eq (Msg u)) => UpdateStructure (u :: Type) 
 class UpdateStructure u => MaskedUpdateStructure (u :: Type) where
   type Mask u :: Type
   mask :: Proxy u -> Msg u -> Mask u
-  (===) :: Proxy u -> Mask u -> Model u -> Model u -> Bool
+  eqv :: Proxy u -> Mask u -> Model u -> Model u -> Bool
 
 data ProdU u1 u2
 
@@ -68,6 +68,17 @@ instance (UpdateStructure u1, UpdateStructure u2) => UpdateStructure (DupU u1 u2
     if msg1 /= mempty && msg2 /= mempty then error "inconsistent in DupU" 
     else (act (Proxy @u1) m1 msg1, act (Proxy @u2) m2 msg2)
 
+instance (MaskedUpdateStructure u1, MaskedUpdateStructure u2) => MaskedUpdateStructure (DupU u1 u2) where
+  type Mask (DupU u1 u2) = (Maybe (Mask u1), Maybe (Mask u2))
+  mask _ (m1, m2) | m1 /= mempty && m2 /= mempty = (Nothing, Nothing)
+                  | m1 /= mempty                 = (Just (mask (Proxy @u1) m1), Nothing)
+                  | m2 /= mempty                 = (Nothing, Just (mask (Proxy @u2) m2))
+                  | otherwise                    = (Just (mask (Proxy @u1) m1), Just (mask (Proxy @u2) m2))
+
+  eqv _ (Nothing, Nothing) _ _ = True
+  eqv _ (Just mask1, Nothing) (m1, _) (m1', _) = eqv (Proxy @u1) mask1 m1 m1'
+  eqv _ (Nothing, Just mask2) (_, m2) (_, m2') = eqv (Proxy @u2) mask2 m2 m2'
+  eqv _ (Just mask1, Just mask2) (m1, m2) (m1', m2') = eqv (Proxy @u1) mask1 m1 m1' && eqv (Proxy @u2) mask2 m2 m2'
 
 data ULens u1 u2 =
   ULens { get    :: Model u1 -> Model u2,
