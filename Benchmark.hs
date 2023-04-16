@@ -186,7 +186,7 @@ jumbotronTemplate = fromView $ \_ ->  Holed (\_f (ViewList buttons) ->
                             H.div_ [ H.class_ "col-md-6"] (fmap (\(Base b) -> b) buttons) ]]))
 
 jumbotron = vmap (\(Pair (Holed template) (Pair h1 (Pair h2 (Pair h3 (Pair h4 (Pair h5 h6)))))) -> template id $ ViewList [h1, h2, h3, h4, h5, h6] ) 
-  $ lmap (splitL (unitL (0, (mkStdGen 0, []))) id) $ product jumbotronTemplate buttons
+  $ vmix (lmap (unitL (0, (mkStdGen 0, []))) jumbotronTemplate) buttons
 
 deletes :: UpdateStructure u => ElmApp (ListU u) (ListU u) (ListV HTML)
 deletes = fromView $ \ls -> ViewList $ fmap (\i -> Base $ 
@@ -219,7 +219,7 @@ tableTemplate = list rowTemplate
 rows :: ElmApp (ListU (ProdU (RepU Int) LabelU)) (ListU (ProdU (RepU Int) LabelU)) (ListV (ProdV HTML HTML))
 rows = fromView $ \ls -> ViewList $ fmap (\(index, label) -> Pair (Base $ H.text $ pack $ show index) (Base $ H.text label)) ls
 
-table = vmap mapView $ lmap (splitL id (proj2L 0)) $ product highlights (lmap (splitL id (mapL (unitL (0, "")))) $ product (vmix rows deletes) tableTemplate)
+table = vmap mapView $ vmix highlights (lmap (proj2L 0) (vmix (vmix rows deletes) (lmap (mapL (unitL (0, ""))) tableTemplate)))
   where
     mapView :: View (ProdV (ListV (ProdV Attr HTML)) (ProdV (ProdV (ListV (ProdV HTML HTML)) (ListV HTML)) (ListV (Attr :~> (HTML :~> (HTML :~> (HTML :~> HTML))))))) m -> View (ListV HTML) m
     mapView (Pair (ViewList highlights) (Pair (Pair (ViewList rows) (ViewList deletes)) (ViewList templates))) = ViewList $ zipWith4 f highlights rows deletes templates
@@ -239,7 +239,7 @@ template = fromView $ \_ -> Holed (\_f (Base jumbotron) -> Holed (\f1 (ViewList 
                       H.span_ [ H.class_ "preloadicon glyphicon glyphicon-remove",
                                 H.boolProp "aria-hidden" True ] [] ]]))
 
-benchmark = vmap f $ lmap (splitL id (unitL (0, (mkStdGen 0, (0, []))))) $ product (lmap (splitL (productL id (productL id (proj2L 0))) (proj2L (mkStdGen 0) . proj2L 0)) $ product jumbotron table) template
+benchmark = vmap f $ vmix (vmix (lmap (productL id (productL id (proj2L 0))) jumbotron) (lmap (proj2L (mkStdGen 0) . proj2L 0) table)) (lmap (unitL (0, (mkStdGen 0, (0, [])))) template)
   where
     f :: View (ProdV (ProdV HTML (ListV HTML)) (HTML :~> (ListV HTML :~> HTML))) m -> View HTML m
     f (Pair (Pair jumbo rows) (Holed template)) =

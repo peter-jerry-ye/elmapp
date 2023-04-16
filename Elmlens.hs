@@ -39,7 +39,7 @@ class (Monoid (Msg u), Eq (Model u), Eq (Msg u)) => UpdateStructure (u :: Type) 
   -- is used to determine type u
   act :: Proxy u -> Model u -> Msg u -> Model u
 
-class UpdateStructure u => MaskedUpdateStructure (u :: Type) where
+class (Semigroup (Mask u), UpdateStructure u) => MaskedUpdateStructure (u :: Type) where
   type Mask u :: Type
   mask :: Proxy u -> Msg u -> Mask u
   eqv :: Proxy u -> Mask u -> Model u -> Model u -> Bool
@@ -80,6 +80,23 @@ instance (MaskedUpdateStructure u1, MaskedUpdateStructure u2) => MaskedUpdateStr
   eqv _ (Nothing, Just mask2) (_, m2) (_, m2') = eqv (Proxy @u2) mask2 m2 m2'
   eqv _ (Just mask1, Just mask2) (m1, m2) (m1', m2') = eqv (Proxy @u1) mask1 m1 m1' && eqv (Proxy @u2) mask2 m2 m2'
 
+instance (MaskedUpdateStructure u1, MaskedUpdateStructure u2) => MaskedUpdateStructure (ProdU u1 u2) where
+  type Mask (ProdU u1 u2) = (Mask u1, Mask u2)
+  mask _ (m1, m2) = (mask (Proxy @u1) m1, mask (Proxy @u2) m2)
+  eqv _ (mask1, mask2) (m1, m2) (m1', m2') = eqv (Proxy @u1) mask1 m1 m1' && eqv (Proxy @u2) mask2 m2 m2'
+
+instance (MaskedUpdateStructure u) => MaskedUpdateStructure (ListU u) where
+  type Mask (ListU u) = Maybe (Mask u)
+  mask _ ms = foldl (<>) Nothing $ fmap f ms
+    where 
+      f (ALIns _ _) = Nothing
+      f (ALDel _) = Nothing
+      f (ALReorder _) = Nothing
+      f (ALRep _ m) = Just (mask (Proxy @u) m)
+      
+  eqv _ (Just m) ms ms' = all id (zipWith (eqv (Proxy @u) m) ms ms')
+  eqv _ Nothing ms ms' = ms == ms'
+
 data ULens u1 u2 =
   ULens { get    :: Model u1 -> Model u2,
           trans  :: Model u1 -> Msg u2 -> Msg u1,
@@ -100,7 +117,7 @@ productL l1 l2 =
     create = \(a,b) -> (create l1 a, create l2 b)
   }
 
-splitL :: forall u uv1 uv2. UpdateStructure u => ULens u uv1 -> ULens u uv2 -> ULens u (uv1 `ProdU` uv2)
+splitL :: forall u uv1 uv2. UpdateStructure u => ULens u uv1 -> ULens u uv2 -> ULens u (uv1 `DupU` uv2)
 splitL l1 l2 =
   ULens {
     get = \s -> (get l1 s, get l2 s),
@@ -167,9 +184,10 @@ vmap f (ElmApp l h) = ElmApp l (f . h)
 vmap' :: ViewType v' => ((Model uv -> View v (Msg uv)) -> (Model uv -> View v' (Msg uv))) -> ElmApp u uv v -> ElmApp u uv v'
 vmap' f (ElmApp l h) = ElmApp l (f h)
 
-vmix :: UpdateStructure u => ElmApp u uv v -> ElmApp u uv' v' -> ElmApp u (ProdU uv uv') (ProdV v v')
-vmix e1 e2 = lmap (splitL id id) $ product e1 e2
-
+vmix :: forall u uv uv' v v'. UpdateStructure u => ElmApp u uv v -> ElmApp u uv' v' -> ElmApp u (DupU uv uv') (ProdV v v')
+vmix (ElmApp l1 view1) (ElmApp l2 view2) = 
+  ElmApp (splitL l1 l2)
+         (\(a, b) -> Pair (fmap (embFst (Proxy @uv) (Proxy @uv')) (view1 a)) (fmap (embSnd (Proxy @uv) (Proxy @uv')) (view2 b)))
 
 product :: forall u1 uv1 v1 u2 uv2 v2. ElmApp u1 uv1 v1 -> ElmApp u2 uv2 v2 -> ElmApp (ProdU u1 u2) (ProdU uv1 uv2) (ProdV v1 v2)
 product (ElmApp l1 view1) (ElmApp l2 view2) =

@@ -65,7 +65,7 @@ highlightProperties = fromView (\(i, list) -> ViewList $ fmap (f i) [0..(Prelude
     f i n = if n == i then ViewList [Property $ H.class_ "chosen"]
                     else ViewList [Property $ H.class_ "not_chosen", Property $ H.onClick (Replace n, mempty)]
 
-highlightDemo = vmap f $ lmap (splitL (proj2L 0) id) $ product (list highlightButton ) highlightProperties 
+highlightDemo = vmap f $ vmix (lmap (proj2L 0) (list highlightButton )) highlightProperties 
   where
     f (Pair (ViewList buttons) (ViewList properties)) = 
       Base $ H.div_ [] ((\(Base h) -> h) <$> Prelude.zipWith (\(Holed template) ps -> template id ps) buttons properties)

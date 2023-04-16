@@ -63,7 +63,7 @@ newTask = fromView (\(str, ls) ->
       H.onInput $ \s -> (Replace s, [] ), 
       H.onChange $ const (Replace "", [ ALIns (Prelude.length ls) (False, (str, Nothing)) ] ) ] )
 
-todoWithoutFilter = vmap f $ lmap (splitL id (proj2L "")) $ product newTask tasks
+todoWithoutFilter = vmap f $ vmix newTask (lmap (proj2L "") tasks)
   where
     f (Pair v1 (ViewList v2)) = Base $ H.div_ [] $ fmap (\(Base h) -> h) (v1 : v2)
 
@@ -102,7 +102,7 @@ filteredTasks =
                             (product taskFilterSwitch doingTasks )
                             (product taskFilterSwitch doneTasks )
 
-todomvc = vmap f $ lmap (splitL (productL id (proj2L DisplayAll)) (proj2L "") ) $ product newTask filteredTasks 
+todomvc = vmap f $ vmix (lmap (productL id (proj2L DisplayAll)) newTask) (lmap (proj2L "") filteredTasks)
   where
     f (Pair (Base inputV) (Pair (Base filterV) (ViewList tasksV))) = 
         Base $ H.div_ [] $ [ inputV, filterV ] ++ fmap (\(Base v) -> v) tasksV
