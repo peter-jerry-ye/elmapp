@@ -30,11 +30,11 @@ executable benchmark
 
 executable test
   main-is:           Main.hs
-  build-depends:     base, QuickCheck, elmlens
+  build-depends:     base, QuickCheck, random, quickcheck-instances, elmlens
   default-language:  Haskell2010
   hs-source-dirs:    test
 
 library
   exposed-modules:   Elmlens, ElmlensProp, Apps, Todo, Benchmark, Benchbase
-  build-depends:     base, miso, random, containers
+  build-depends:     base, miso == 1.8.3.0, random, containers
   default-language:  Haskell2010
