@@ -31,6 +31,9 @@ import           Miso             hiding (View)
 import qualified Miso.Html        as H
 import           Miso.String      (MisoString)
 
+class (Monoid m) => ElmlensMsg m where
+  checkMempty :: m -> Bool
+
 -- Update Structure
 class (Monoid (Msg u), Eq (Model u), Eq (Msg u)) => UpdateStructure (u :: Type) where
   type Model u :: Type
@@ -38,11 +41,6 @@ class (Monoid (Msg u), Eq (Model u), Eq (Msg u)) => UpdateStructure (u :: Type) 
   -- NB: data Proxy (u :: k) = Proxy
   -- is used to determine type u
   act :: Proxy u -> Model u -> Msg u -> Model u
-
-class (Semigroup (Mask u), UpdateStructure u) => MaskedUpdateStructure (u :: Type) where
-  type Mask u :: Type
-  mask :: Proxy u -> Msg u -> Mask u
-  eqv :: Proxy u -> Mask u -> Model u -> Model u -> Bool
 
 data ProdU u1 u2
 
@@ -65,37 +63,8 @@ instance (UpdateStructure u1, UpdateStructure u2) => UpdateStructure (DupU u1 u2
   type Msg (DupU u1 u2) = (Msg u1, Msg u2)
 
   act _ (m1, m2) (msg1, msg2) = 
-    if msg1 /= mempty && msg2 /= mempty then error "inconsistent in DupU" 
+    if msg1 /= mempty && msg2 /= mempty then error "Inconsistent act in DupU" 
     else (act (Proxy @u1) m1 msg1, act (Proxy @u2) m2 msg2)
-
-instance (MaskedUpdateStructure u1, MaskedUpdateStructure u2) => MaskedUpdateStructure (DupU u1 u2) where
-  type Mask (DupU u1 u2) = (Maybe (Mask u1), Maybe (Mask u2))
-  mask _ (m1, m2) | m1 /= mempty && m2 /= mempty = (Nothing, Nothing)
-                  | m1 /= mempty                 = (Just (mask (Proxy @u1) m1), Nothing)
-                  | m2 /= mempty                 = (Nothing, Just (mask (Proxy @u2) m2))
-                  | otherwise                    = (Just (mask (Proxy @u1) m1), Just (mask (Proxy @u2) m2))
-
-  eqv _ (Nothing, Nothing) _ _ = True
-  eqv _ (Just mask1, Nothing) (m1, _) (m1', _) = eqv (Proxy @u1) mask1 m1 m1'
-  eqv _ (Nothing, Just mask2) (_, m2) (_, m2') = eqv (Proxy @u2) mask2 m2 m2'
-  eqv _ (Just mask1, Just mask2) (m1, m2) (m1', m2') = eqv (Proxy @u1) mask1 m1 m1' && eqv (Proxy @u2) mask2 m2 m2'
-
-instance (MaskedUpdateStructure u1, MaskedUpdateStructure u2) => MaskedUpdateStructure (ProdU u1 u2) where
-  type Mask (ProdU u1 u2) = (Mask u1, Mask u2)
-  mask _ (m1, m2) = (mask (Proxy @u1) m1, mask (Proxy @u2) m2)
-  eqv _ (mask1, mask2) (m1, m2) (m1', m2') = eqv (Proxy @u1) mask1 m1 m1' && eqv (Proxy @u2) mask2 m2 m2'
-
-instance (MaskedUpdateStructure u) => MaskedUpdateStructure (ListU u) where
-  type Mask (ListU u) = Maybe (Mask u)
-  mask _ ms = foldl (<>) Nothing $ fmap f ms
-    where 
-      f (ALIns _ _) = Nothing
-      f (ALDel _) = Nothing
-      f (ALReorder _) = Nothing
-      f (ALRep _ m) = Just (mask (Proxy @u) m)
-      
-  eqv _ (Just m) ms ms' = all id (zipWith (eqv (Proxy @u) m) ms ms')
-  eqv _ Nothing ms ms' = ms == ms'
 
 data ULens u1 u2 =
   ULens { get    :: Model u1 -> Model u2,
@@ -117,12 +86,17 @@ productL l1 l2 =
     create = \(a,b) -> (create l1 a, create l2 b)
   }
 
-splitL :: forall u uv1 uv2. UpdateStructure u => ULens u uv1 -> ULens u uv2 -> ULens u (uv1 `DupU` uv2)
+splitL :: forall u uv1 uv2. (UpdateStructure u, UpdateStructure uv1, UpdateStructure uv2) => ULens u uv1 -> ULens u uv2 -> ULens u (uv1 `DupU` uv2)
 splitL l1 l2 =
   ULens {
     get = \s -> (get l1 s, get l2 s),
-    trans = \s (da, db) -> trans l1 s da <> trans l2 s db,
-    create = \(a, _b) -> create l1 a
+    trans = \s (da, db) -> 
+      if da /= mempty && db /= mempty then error "Inconsistent trans in DupU"
+      else trans l1 s da <> trans l2 s db,
+    create = \(a, b) -> 
+      let a' = create l1 a
+          b' = create l2 b in
+      if a' /= b' then error "Inconsistent create in DupU" else a'
   }
 
 proj1L :: UpdateStructure u2 => Model u2 -> ULens (ProdU u1 u2) u1
@@ -160,7 +134,7 @@ data (a :: VType) :~> (b :: VType)
 data ProdV a b
 
 instance (ViewType a, ViewType b) => ViewType (a :~> b) where
-  newtype View (a :~> b) msg = Holed (forall m. (msg -> m) -> View a m -> View b m)
+  data View (a :~> b) msg = Holed (forall m. (msg -> m) -> View a m -> View b m)
 instance Functor (View (a :~> b)) where
   fmap f (Holed h) = Holed $ \emb -> h (emb . f)
 

@@ -3,12 +3,17 @@
 module Main where
 
 import Test.QuickCheck
+import Test.QuickCheck.Instances
+import Test.HUnit
+import Control.Category (Category (..))
+import Prelude hiding (id)
+import Miso
+import qualified Miso.Html        as H
 import ElmlensProp
 import Elmlens
 import Apps
 import Benchmark
 import System.Random
-import Test.QuickCheck.Instances
 
 instance MaskedUpdateStructure IntU where
   type Mask IntU = ()
@@ -44,6 +49,15 @@ testULens lens = do
 
 testElmApp (ElmApp lens _) = testULens lens
 
+test1 = TestCase (assertEqual "1==1" 1 1)
+
+elmlens1 :: ElmApp IntU IntU HTML
+elmlens1 = fromView $ \_ -> Base $ H.div_ [] []
+
+elmlens2 = vmix elmlens1 elmlens1
+
 main :: IO ()
 main = do
-  testElmApp buttons
+  testElmApp elmlens2
+  -- testElmApp buttons
+  -- runTestTTAndExit $ TestList [TestLabel "test1" test1]

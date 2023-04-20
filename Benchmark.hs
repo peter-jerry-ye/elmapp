@@ -10,12 +10,13 @@ import Miso hiding (View)
 import qualified Miso.Html as H
 import Miso.String      (MisoString, unwords, pack)
 import Data.Semigroup   (Sum (..))
-import Data.List (zipWith4)
+import Data.List (zipWith4, genericReplicate)
 import System.Random
 import Prelude hiding (id, product, (.), unwords)
 import Elmlens
 import Apps
 import Data.IntMap.Strict (fromList)
+import Numeric.Natural
 
 adjectives :: [ MisoString ]
 adjectives = [
@@ -97,57 +98,48 @@ instance UpdateStructure LabelU where
 
   act _ n m = n <> m
 
-buttonsConfig :: [(MisoString, MisoString, ULens (ProdU (RepU Int) (ProdU (RepU StdGen) (ListU (ProdU (RepU Int) LabelU)))) (UnitU (Maybe ())))]
+buttonsConfig :: [(MisoString, MisoString, ULens (ProdU (RepU Int) (ProdU (RepU StdGen) (ListU (ProdU (RepU Int) LabelU)))) (UnitU (Sum Natural)))]
 buttonsConfig = [
   ("run", "Create 1,000 rows", 
     ULens { get = const (),
-            trans = \(index, (gen, ls)) m -> case m of
-              Nothing -> mempty
-              Just _ -> (Replace $ index + 1000, (Replace newGen, replicate (length ls) (ALDel 0) ++ zipWith ALIns [0..] newRows)) 
-                where (newRows, newGen) = generateRows 1000 index ([], gen),
+            trans = \(index, (gen, ls)) (Sum m) -> 
+              let (newRows, newGen) = generateRows 1000 index ([], gen) in
+              if toInteger m == 0 then mempty else foldl1 (<>) $ genericReplicate m (Replace $ index + 1000, (Replace newGen, replicate (length ls) (ALDel 0) ++ zipWith ALIns [0..] newRows)),
             create = const (0, (mkStdGen 0, []))}),
   ("runlots", "Create 10,000 rows",
     ULens { get = const (),
-            trans = \(index, (gen, ls)) m -> case m of
-              Nothing -> mempty
-              Just _ -> (Replace $ index + 10000, (Replace newGen, replicate (length ls) (ALDel 0) ++ zipWith ALIns [0..] newRows)) 
-                where (newRows, newGen) = generateRows 10000 index ([], gen),
+            trans = \(index, (gen, ls)) (Sum m) -> 
+              let (newRows, newGen) = generateRows 10000 index ([], gen) in
+              if toInteger m == 0 then mempty else foldl1 (<>) $ genericReplicate m (Replace $ index + 10000, (Replace newGen, replicate (length ls) (ALDel 0) ++ zipWith ALIns [0..] newRows)),
             create = const (0, (mkStdGen 0, []))}),
   ("add", "Append 1,000 rows",
     ULens { get = const (),
-            trans = \(index, (gen, ls)) m -> case m of
-              Nothing -> mempty
-              Just _ -> (Replace $ index + 1000, (Replace newGen, zipWith ALIns [(length ls)..] newRows)) 
-                where (newRows, newGen) = generateRows 1000 index ([], gen),
+            trans = \(index, (gen, ls)) (Sum m) -> 
+              let (newRows, newGen) = generateRows 1000 index ([], gen) in
+              if toInteger m == 0 then mempty else foldl1 (<>) $ genericReplicate m (Replace $ index + 1000, (Replace newGen, zipWith ALIns [(length ls)..] newRows)),
             create = const (0, (mkStdGen 0, []))}),
   ("update", "Update every 10th row", 
     ULens { get = const (), 
-            trans = \(_, (_, ls)) m -> case m of 
-              Nothing -> mempty
-              Just _  -> (mempty, (mempty, [ ALRep i (mempty, " !!!") | i <- [0 .. (length ls)], i `mod` 10 == 0])),
+            trans = \(_, (_, ls)) m -> if m == 0 then mempty else (mempty, (mempty, [ ALRep i (mempty, " !!!") | i <- [0 .. (length ls)], i `mod` 10 == 0])),
             create = const (0, (mkStdGen 0, []))}),
   ("clear", "Clear", 
     ULens { get = const (),
-            trans = \(_, (_, ls)) m -> case m of
-              Nothing -> mempty
-              Just _  -> (mempty, (mempty, replicate (length ls) (ALDel 0))),
+            trans = \(_, (_, ls)) m -> if m == 0 then mempty else (mempty, (mempty, replicate (length ls) (ALDel 0))),
             create = const (0, (mkStdGen 0, []))}),
   ("swaprows", "Swap Rows", 
     ULens { get = const (),
-            trans = \(_, (_, ls)) m -> case m of
-              Nothing -> mempty
-              Just _  -> (mempty, (mempty, [ ALReorder $ fromList [(1, 998), (998, 1)] ])),
+            trans = \(_, (_, ls)) m -> if m == 0 then mempty else (mempty, (mempty, [ ALReorder $ fromList [(1, 998), (998, 1)] ])),
             create = const (0, (mkStdGen 0, []))})]
 
 -- TODO When a button is clicked multiple times, will the message be truncated into one?
 
-btnPrimaryBlock :: MisoString -> MisoString -> ElmApp (UnitU (Maybe ())) (UnitU (Maybe ())) HTML
+btnPrimaryBlock :: MisoString -> MisoString -> ElmApp (UnitU (Sum Natural)) (UnitU (Sum Natural)) HTML
 btnPrimaryBlock buttonId label = fromView $ \_ -> Base $ 
     H.div_ [ H.class_ "col-sm-6 smallpad" ]
            [ H.button_ [ H.type_ "button",
                          H.class_ "btn btn-primary btn-block",
                          H.id_ buttonId,
-                         H.onClick $ Just (),
+                         H.onClick 0,
                          H.textProp "ref" "text" ]
                        [ text label ] ]
 
@@ -177,7 +169,7 @@ buttons = vmix ((\(buttonId, label, lens) -> lmap lens $ btnPrimaryBlock buttonI
         $ vmix ((\(buttonId, label, lens) -> lmap lens $ btnPrimaryBlock buttonId label) $ buttonsConfig !! 4)
                ((\(buttonId, label, lens) -> lmap lens $ btnPrimaryBlock buttonId label) $ buttonsConfig !! 5)
                     
-jumbotronTemplate :: ElmApp (UnitU (Maybe ())) (UnitU (Maybe ())) (ListV HTML :~> HTML)
+jumbotronTemplate :: ElmApp (UnitU (Sum Natural)) (UnitU (Sum Natural)) (ListV HTML :~> HTML)
 jumbotronTemplate = fromView $ \_ ->  Holed (\_f (ViewList buttons) -> 
     Base (H.div_ [ H.class_ "jumbotron" ]
                  [ H.div_ [ H.class_ "row" ]
@@ -202,7 +194,7 @@ highlights = fromView $ \(selected, ls) -> ViewList $ fmap (\(id, label) ->
          ( Base $ H.a_ [H.onClick (Replace id, mempty)] [ text label ]) )
     ls
 
-rowTemplate :: ElmApp (UnitU (Maybe ())) (UnitU (Maybe ())) (Attr :~> (HTML :~> (HTML :~> (HTML :~> HTML))))
+rowTemplate :: ElmApp (UnitU (Sum Natural)) (UnitU (Sum Natural)) (Attr :~> (HTML :~> (HTML :~> (HTML :~> HTML))))
 rowTemplate = fromView $ \_ -> 
   Holed (\_f (Property attr) -> 
   Holed (\f1 (Base h1) ->
@@ -230,7 +222,7 @@ table = vmap mapView $ vmix highlights (lmap (proj2L 0) (vmix (vmix rows deletes
           Holed template4 = template3 id button
           in template4 id delete
 
-template :: ElmApp (UnitU (Maybe ())) (UnitU (Maybe ())) (HTML :~> (ListV HTML :~> HTML))
+template :: ElmApp (UnitU (Sum Natural)) (UnitU (Sum Natural)) (HTML :~> (ListV HTML :~> HTML))
 template = fromView $ \_ -> Holed (\_f (Base jumbotron) -> Holed (\f1 (ViewList rows) -> 
     Base $ H.div_ [ H.class_ "container" ] 
                   [ f1 <$> jumbotron,
