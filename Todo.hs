@@ -89,11 +89,11 @@ taskFilterSwitch = fromView view
       H.label_ [] [ text "Done" ] ]
 
 allTasks = vmap' f tasks
-  where f view = \(ls1, ls2) -> view (ls1, ls2)
+  where f view = \(Dup ls1 ls2) -> view (Dup ls1 ls2)
 doingTasks = vmap' f tasks
-  where f view = \(ls1, ls2) -> view (filter (not . fst) ls1, filter (not . fst) ls2)
+  where f view = \(Dup ls1 ls2) -> view (Dup (filter (not . fst) ls1) (filter (not . fst) ls2))
 doneTasks = vmap' f tasks
-  where f view = \(ls1, ls2) -> view (filter fst ls1, filter fst ls2)
+  where f view = \(Dup ls1 ls2) -> view (Dup (filter fst ls1) (filter fst ls2))
 
 filteredTasks = 
   conditional (\(filter, _) -> filter == DisplayAll)

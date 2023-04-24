@@ -14,6 +14,7 @@ import Elmlens
 import Apps
 import Benchmark
 import System.Random
+import Control.Applicative (liftA2)
 
 instance MaskedUpdateStructure IntU where
   type Mask IntU = ()
@@ -35,6 +36,15 @@ instance MaskedUpdateStructure LabelU where
   mask _ _ = ()
   eqv _ _ = (==)
 
+instance (Arbitrary a, Arbitrary b) => Arbitrary (Dup a b) where
+  arbitrary = liftA2 Dup arbitrary arbitrary
+
+instance (Arbitrary a, Arbitrary b) => Arbitrary (DupMsg a b) where
+  arbitrary = oneof [ 
+    fmap MLeft arbitrary, 
+    fmap MRight arbitrary, 
+    return MNone]
+
 instance Arbitrary StdGen where
   arbitrary = fmap mkStdGen chooseAny
 
@@ -51,6 +61,9 @@ testElmApp (ElmApp lens _) = testULens lens
 
 test1 = TestCase (assertEqual "1==1" 1 1)
 
+test2 :: ULens IntU (DupU IntU IntU)
+test2 = splitL id id
+
 elmlens1 :: ElmApp IntU IntU HTML
 elmlens1 = fromView $ \_ -> Base $ H.div_ [] []
 
@@ -58,6 +71,7 @@ elmlens2 = vmix elmlens1 elmlens1
 
 main :: IO ()
 main = do
-  testElmApp elmlens2
+  testULens test2
+  -- testElmApp elmlens2
   -- testElmApp buttons
   -- runTestTTAndExit $ TestList [TestLabel "test1" test1]

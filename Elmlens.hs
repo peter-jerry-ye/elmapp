@@ -31,11 +31,11 @@ import           Miso             hiding (View)
 import qualified Miso.Html        as H
 import           Miso.String      (MisoString)
 
-class (Monoid m) => ElmlensMsg m where
-  checkMempty :: m -> Bool
+-- class (Monoid m) => ElmlensMsg m where
+  -- checkMempty :: m -> Bool
 
 -- Update Structure
-class (Monoid (Msg u), Eq (Model u), Eq (Msg u)) => UpdateStructure (u :: Type) where
+class (Monoid (Msg u), Eq (Msg u), Eq (Model u)) => UpdateStructure (u :: Type) where
   type Model u :: Type
   type Msg u :: Type
   -- NB: data Proxy (u :: k) = Proxy
@@ -58,13 +58,32 @@ embSnd _ _ m = (mempty, m)
 
 data DupU u1 u2
 
-instance (UpdateStructure u1, UpdateStructure u2) => UpdateStructure (DupU u1 u2) where
-  type Model (DupU u1 u2) = (Model u1, Model u2)
-  type Msg (DupU u1 u2) = (Msg u1, Msg u2)
+data Dup a b = Dup a b deriving (Eq, Show)
 
-  act _ (m1, m2) (msg1, msg2) = 
-    if msg1 /= mempty && msg2 /= mempty then error "Inconsistent act in DupU" 
-    else (act (Proxy @u1) m1 msg1, act (Proxy @u2) m2 msg2)
+data DupMsg ma mb = MNone | MLeft ma | MRight mb deriving (Eq, Show)
+
+instance (Monoid ma, Monoid mb, Eq ma, Eq mb) => Semigroup (DupMsg ma mb) where
+  MNone <> m = m
+  m <> MNone = m
+  MLeft ma <> MLeft ma' = MLeft $ ma <> ma'
+  MRight mb <> MRight mb' = MRight $ mb <> mb'
+  MLeft ma <> MRight mb | ma == mempty = MRight mb
+                        | mb == mempty = MLeft ma
+                        | otherwise    = error "Inconsistent <> in DupMsg"
+  MRight mb <> MLeft ma | ma == mempty = MRight mb
+                        | mb == mempty = MLeft ma
+                        | otherwise    = error "Inconsistent <> in DupMsg"
+
+instance (Monoid ma, Monoid mb, Eq ma, Eq mb) => Monoid (DupMsg ma mb) where
+  mempty = MNone
+
+instance (UpdateStructure u1, UpdateStructure u2) => UpdateStructure (DupU u1 u2) where
+  type Model (DupU u1 u2) = Dup (Model u1) (Model u2)
+  type Msg (DupU u1 u2) = DupMsg (Msg u1) (Msg u2)
+
+  act _ (Dup m1 m2) MNone = Dup m1 m2
+  act _ (Dup m1 m2) (MLeft ma) = Dup (act (Proxy @u1) m1 ma) m2
+  act _ (Dup m1 m2) (MRight mb) = Dup m1 (act (Proxy @u2) m2 mb)
 
 data ULens u1 u2 =
   ULens { get    :: Model u1 -> Model u2,
@@ -89,11 +108,12 @@ productL l1 l2 =
 splitL :: forall u uv1 uv2. (UpdateStructure u, UpdateStructure uv1, UpdateStructure uv2) => ULens u uv1 -> ULens u uv2 -> ULens u (uv1 `DupU` uv2)
 splitL l1 l2 =
   ULens {
-    get = \s -> (get l1 s, get l2 s),
-    trans = \s (da, db) -> 
-      if da /= mempty && db /= mempty then error "Inconsistent trans in DupU"
-      else trans l1 s da <> trans l2 s db,
-    create = \(a, b) -> 
+    get = \s -> Dup (get l1 s) (get l2 s),
+    trans = \s d -> case d of
+      MNone -> mempty
+      MLeft dl -> trans l1 s dl
+      MRight dr -> trans l2 s dr,
+    create = \(Dup a b) -> 
       let a' = create l1 a
           b' = create l2 b in
       if a' /= b' then error "Inconsistent create in DupU" else a'
@@ -161,7 +181,7 @@ vmap' f (ElmApp l h) = ElmApp l (f h)
 vmix :: forall u uv uv' v v'. UpdateStructure u => ElmApp u uv v -> ElmApp u uv' v' -> ElmApp u (DupU uv uv') (ProdV v v')
 vmix (ElmApp l1 view1) (ElmApp l2 view2) = 
   ElmApp (splitL l1 l2)
-         (\(a, b) -> Pair (fmap (embFst (Proxy @uv) (Proxy @uv')) (view1 a)) (fmap (embSnd (Proxy @uv) (Proxy @uv')) (view2 b)))
+         (\(Dup a b) -> Pair (fmap MLeft (view1 a)) (fmap MRight (view2 b)))
 
 product :: forall u1 uv1 v1 u2 uv2 v2. ElmApp u1 uv1 v1 -> ElmApp u2 uv2 v2 -> ElmApp (ProdU u1 u2) (ProdU uv1 uv2) (ProdV v1 v2)
 product (ElmApp l1 view1) (ElmApp l2 view2) =

@@ -29,15 +29,15 @@ class (Semigroup (Mask u), UpdateStructure u) => MaskedUpdateStructure (u :: Typ
 
 instance (MaskedUpdateStructure u1, MaskedUpdateStructure u2) => MaskedUpdateStructure (DupU u1 u2) where
   type Mask (DupU u1 u2) = (Maybe (Mask u1), Maybe (Mask u2))
-  mask _ (m1, m2) | m1 /= mempty && m2 /= mempty = (Just (mask (Proxy @u1) m1), Just (mask (Proxy @u2) m2))
-                  | m1 /= mempty                 = (Just (mask (Proxy @u1) m1), Nothing)
-                  | m2 /= mempty                 = (Nothing, Just (mask (Proxy @u2) m2))
-                  | otherwise                    = (Nothing, Nothing)
+  mask _ MNone = (Nothing, Nothing)
+  mask _ (MLeft m) | m == mempty = (Nothing, Nothing)
+                   | otherwise   = (Just (mask (Proxy @u1) m), Nothing)
+  mask _ (MRight m) | m == mempty = (Nothing, Nothing)
+                    | otherwise   = (Nothing, Just (mask (Proxy @u2) m))
 
-  eqv _ (Nothing, Nothing) _ _ = True
-  eqv _ (Just mask1, Nothing) (m1, _) (m1', _) = eqv (Proxy @u1) mask1 m1 m1'
-  eqv _ (Nothing, Just mask2) (_, m2) (_, m2') = eqv (Proxy @u2) mask2 m2 m2'
-  eqv _ (Just mask1, Just mask2) (m1, m2) (m1', m2') = eqv (Proxy @u1) mask1 m1 m1' && eqv (Proxy @u2) mask2 m2 m2'
+  eqv _ (mask1, mask2) (Dup m1 m2) (Dup m1' m2') = eqv' (Proxy @u1) mask1 m1 m1' && eqv' (Proxy @u2) mask2 m2 m2'
+    where eqv' _ Nothing _ _ = True
+          eqv' proxy (Just msg) m m' = eqv proxy msg m m'
 
 instance (MaskedUpdateStructure u1, MaskedUpdateStructure u2) => MaskedUpdateStructure (ProdU u1 u2) where
   type Mask (ProdU u1 u2) = (Mask u1, Mask u2)
