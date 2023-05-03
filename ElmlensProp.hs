@@ -74,6 +74,8 @@ consistencyProp lens m1 msg2 =
     m2 = get lens m1
     m  = mask (Proxy @u2) msg2
 
-createProp :: forall u1 u2. UpdateStructure u2 => ULens u1 u2 -> Model u2 -> Bool
-createProp lens m2 =
+-- get create get
+createProp :: forall u1 u2. MaskedUpdateStructure u2 => ULens u1 u2 -> Model u1 -> Bool
+createProp lens m1 =
   get lens (create lens m2) == m2
+    where m2 = get lens m1
