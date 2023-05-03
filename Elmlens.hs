@@ -264,8 +264,22 @@ filterList predicate  = vmap' viewFilteredList
       (_xs1, xi : _xs2) -> ALRep xi da : f n ls dbs
     f n ls (ALReorder reorder : dbs) = ALReorder (fromList $ fmap (\(from, to) -> (ls !! from, ls !! to)) $ toList reorder) : f n ls dbs
 
-conditional :: forall u uv v. UpdateStructure u => (Model uv -> Bool) -> ElmApp u uv v -> ElmApp u uv v -> ElmApp u uv v
-conditional predicate (ElmApp lens v1) (ElmApp _ v2) = ElmApp lens (\s -> if predicate s then v1 s else v2 s)
+filterE :: forall u uv v. (UpdateStructure u, ViewType v) => (Model u -> Bool) -> ElmApp (ListU u) uv (ListV v) -> ElmApp (ListU u) (DupU (ListU u) uv) (ListV v)
+filterE predicate e = vmap f $ vmix eFilter e
+  where
+    f (Pair (Holed template) v) = template id v
+    eFilter :: ElmApp (ListU u) (ListU u) (ListV v :~> ListV v)
+    eFilter = fromView $ \ls -> Holed (\_ (ViewList vs) -> ViewList $ fmap fst $ filter (predicate . snd) $ zip vs ls)
+    
+
+conditional :: forall u uv1 uv2 v. (UpdateStructure u, ViewType v) => (Model u -> Bool)
+  -> ElmApp u uv1 v -> ElmApp u uv2 v -> ElmApp u (DupU u (DupU uv1 uv2)) v
+conditional predicate e1 e2 = vmap f $ vmix eConditional $ vmix e1 e2
+  where
+    f (Pair (Holed template) (Pair v1 v2)) = let Holed template2 = template id v1 in template2 id v2
+    eConditional :: ElmApp u u (v :~> (v :~> v))
+    eConditional = fromView $ \s -> Holed (\_ v1 -> 
+                                    Holed (\f' v2 -> if predicate s then fmap f' v1 else v2))
     
 render :: forall u uv. UpdateStructure u => ElmApp u uv HTML -> Model u -> Maybe MisoString -> App (Model u) (Msg u)
 render (ElmApp l v) model mountPoint = App {

@@ -21,7 +21,7 @@ data EditMsg =
     Focus
   | Cancel
   | Commit
-  | Edit MisoString deriving Eq
+  | Edit MisoString deriving (Eq, Show)
 
 instance UpdateStructure TaskInputU where
   type Model TaskInputU = (MisoString, Maybe MisoString)
@@ -56,6 +56,10 @@ tasks = vmap f $ vmix (list taskRow) deleteButtons
   where
     f (Pair (ViewList v1) (ViewList v2)) = ViewList $ Data.List.zipWith (\(Holed template) button -> template id button) v1 v2
 
+unfinishedTasks = filterE (not . fst) tasks
+
+finishedTasks = filterE fst tasks
+
 newTask :: ElmApp (ProdU StringU (ListU (ProdU BoolU TaskInputU))) (ProdU StringU (ListU (ProdU BoolU TaskInputU))) HTML
 newTask = fromView (\(str, ls) -> 
     Base $ H.input_ [ 
@@ -88,19 +92,12 @@ taskFilterSwitch = fromView view
       H.input_ [ H.type_ "radio", H.checked_ $ filter == Done, H.onChange $ \_ -> Replace Done ],
       H.label_ [] [ text "Done" ] ]
 
-allTasks = vmap' f tasks
-  where f view = \(Dup ls1 ls2) -> view (Dup ls1 ls2)
-doingTasks = vmap' f tasks
-  where f view = \(Dup ls1 ls2) -> view (Dup (filter (not . fst) ls1) (filter (not . fst) ls2))
-doneTasks = vmap' f tasks
-  where f view = \(Dup ls1 ls2) -> view (Dup (filter fst ls1) (filter fst ls2))
-
 filteredTasks = 
   conditional (\(filter, _) -> filter == DisplayAll)
-              (product taskFilterSwitch allTasks )
+              (product taskFilterSwitch tasks)
               $ conditional (\(filter, _) -> filter == Doing)
-                            (product taskFilterSwitch doingTasks )
-                            (product taskFilterSwitch doneTasks )
+                            (product taskFilterSwitch unfinishedTasks)
+                            (product taskFilterSwitch finishedTasks)
 
 todomvc = vmap f $ vmix (lmap (productL id (proj2L DisplayAll)) newTask) (lmap (proj2L "") filteredTasks)
   where

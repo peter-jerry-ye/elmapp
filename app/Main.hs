@@ -13,5 +13,5 @@ main :: IO ()
 main = startApp $ 
   -- todo_app_without_filter 
   -- highlight_demo_app
-   todomvcapp $ Just "mountPoint"
+   todomvcapp $ Nothing
 
