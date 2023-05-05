@@ -32,7 +32,7 @@ counterApp :: Maybe MisoString -> App (Model IntU) (Msg IntU)
 counterApp = render counter 0
 
 data RepU (a :: Type)
-data ScratchMsg a = Replace a | Keep deriving Eq
+data ScratchMsg a = Replace a | Keep deriving (Eq, Show)
 
 instance Semigroup (ScratchMsg a) where
   Keep <> b              = b

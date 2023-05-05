@@ -8,9 +8,9 @@ import Data.Kind        (Type)
 import Control.Category (Category (..))
 import Miso hiding (View)
 import qualified Miso.Html as H
-import Miso.String      (MisoString, unwords, pack)
+import Miso.String      (MisoString, unwords, pack, replicate)
 import Data.Semigroup   (Sum (..))
-import Data.List (zipWith4, genericReplicate)
+import Data.List (zipWith4)
 import System.Random
 import Prelude hiding (id, product, (.), unwords)
 import Elmlens
@@ -102,33 +102,38 @@ buttonsConfig :: [(MisoString, MisoString, ULens (ProdU (RepU Int) (ProdU (RepU 
 buttonsConfig = [
   ("run", "Create 1,000 rows", 
     ULens { get = const (),
-            trans = \(index, (gen, ls)) (Sum m) -> 
-              let (newRows, newGen) = generateRows 1000 index ([], gen) in
-              if toInteger m == 0 then mempty else foldl1 (<>) $ genericReplicate m (Replace $ index + 1000, (Replace newGen, replicate (length ls) (ALDel 0) ++ zipWith ALIns [0..] newRows)),
+            trans = \(index, (gen, ls)) (Sum m) -> let n = 1000 in (\(msgs, _, _, _) -> msgs) $ 
+                foldl (\(cumul, index, gen, l) _ -> 
+                        let (newRows, newGen) = generateRows n index ([], gen) 
+                        in (cumul <> (Replace $ index + n, (Replace newGen, Prelude.replicate l (ALDel 0) ++ zipWith ALIns [0..] newRows)), index + n, newGen, length newRows)) 
+                      (mempty, index, gen, length ls) [0 .. m - 1],
             create = const (0, (mkStdGen 0, []))}),
   ("runlots", "Create 10,000 rows",
     ULens { get = const (),
-            trans = \(index, (gen, ls)) (Sum m) -> 
-              let (newRows, newGen) = generateRows 10000 index ([], gen) in
-              if toInteger m == 0 then mempty else foldl1 (<>) $ genericReplicate m (Replace $ index + 10000, (Replace newGen, replicate (length ls) (ALDel 0) ++ zipWith ALIns [0..] newRows)),
+            trans = \(index, (gen, ls)) (Sum m) -> let n = 10000 in (\(msgs, _, _, _) -> msgs) $ 
+                foldl (\(cumul, index, gen, l) _ -> 
+                        let (newRows, newGen) = generateRows n index ([], gen) 
+                        in (cumul <> (Replace $ index + n, (Replace newGen, Prelude.replicate l (ALDel 0) ++ zipWith ALIns [0..] newRows)), index + n, newGen, length newRows)) 
+                      (mempty, index, gen, length ls) [0 .. m - 1],
             create = const (0, (mkStdGen 0, []))}),
   ("add", "Append 1,000 rows",
     ULens { get = const (),
             trans = \(index, (gen, ls)) (Sum m) -> 
-              let (newRows, newGen) = generateRows 1000 index ([], gen) in
-              if toInteger m == 0 then mempty else foldl1 (<>) $ genericReplicate m (Replace $ index + 1000, (Replace newGen, zipWith ALIns [(length ls)..] newRows)),
+              let n = 1000 * fromIntegral m
+                  (newRows, newGen) = generateRows n index ([], gen) in
+              if n == 0 then mempty else (Replace $ index + n, (Replace newGen, zipWith ALIns [(length ls)..] newRows)),
             create = const (0, (mkStdGen 0, []))}),
   ("update", "Update every 10th row", 
     ULens { get = const (), 
-            trans = \(_, (_, ls)) m -> if m == 0 then mempty else (mempty, (mempty, [ ALRep i (mempty, " !!!") | i <- [0 .. (length ls)], i `mod` 10 == 0])),
+            trans = \(_, (_, ls)) (Sum m) -> if m == 0 then mempty else (mempty, (mempty, [ ALRep i (mempty, Miso.String.replicate (fromIntegral m) $ pack " !!!") | i <- [0 .. (length ls)], i `mod` 10 == 0])),
             create = const (0, (mkStdGen 0, []))}),
   ("clear", "Clear", 
     ULens { get = const (),
-            trans = \(_, (_, ls)) m -> if m == 0 then mempty else (mempty, (mempty, replicate (length ls) (ALDel 0))),
+            trans = \(_, (_, ls)) m -> if m == 0 then mempty else (mempty, (mempty, Prelude.replicate (length ls) (ALDel 0))),
             create = const (0, (mkStdGen 0, []))}),
   ("swaprows", "Swap Rows", 
     ULens { get = const (),
-            trans = \(_, (_, ls)) m -> if m == 0 then mempty else (mempty, (mempty, [ ALReorder $ fromList [(1, 998), (998, 1)] ])),
+            trans = \(_, (_, ls)) (Sum m) -> if m == 0 then mempty else (mempty, (mempty, Prelude.replicate (fromIntegral m) $ ALReorder $ fromList [(1, 998), (998, 1)])),
             create = const (0, (mkStdGen 0, []))})]
 
 -- TODO When a button is clicked multiple times, will the message be truncated into one?

@@ -194,7 +194,7 @@ data AtomicListMsg model msg
   = ALIns Int model
   | ALDel Int
   | ALRep Int msg
-  | ALReorder (IntMap Int) deriving Eq
+  | ALReorder (IntMap Int) deriving (Eq, Show)
 
 -- For simplicity, we treat out-of-bound updates as identity updates
 actAtomicListMsg :: UpdateStructure u => Proxy u -> [ Model u ] -> AtomicListMsg (Model u) (Msg u) -> [ Model u ]
