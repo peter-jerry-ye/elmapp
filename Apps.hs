@@ -72,24 +72,6 @@ highlightDemo = vmap f $ vmix (lmap (proj2L 0) (list highlightButton )) highligh
 
 highlightDemoApp = render highlightDemo (0, [(), (), (), (), ()])
 
-data Menu msg = Menu {
-  selectedItem :: Maybe String,
-  items :: [MenuItem msg]
-}
-
-data MenuItem msg = 
-    MenuItem {
-      label_ :: String,
-      key :: String,
-      message :: msg
-    }
-  | SubMenu {
-      label_ :: String,
-      key :: String,
-      selectedKey :: Maybe String,
-      children :: [MenuItem msg]
-    }
-
 data UnitU (a :: Type)
 
 instance (Monoid a, Eq a) => UpdateStructure (UnitU a) where

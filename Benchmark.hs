@@ -199,7 +199,7 @@ highlights = fromView $ \(selected, ls) -> ViewList $ fmap (\(id, label) ->
          ( Base $ H.a_ [H.onClick (Replace id, mempty)] [ text label ]) )
     ls
 
-rowTemplate :: ElmApp (UnitU (Sum Natural)) (UnitU (Sum Natural)) (Attr :~> (HTML :~> (HTML :~> (HTML :~> HTML))))
+rowTemplate :: ElmApp (UnitU (Sum Natural)) (UnitU (Sum Natural)) (Attr :~> HTML :~> HTML :~> HTML :~> HTML)
 rowTemplate = fromView $ \_ -> 
   Holed (\_f (Property attr) -> 
   Holed (\f1 (Base h1) ->
@@ -221,13 +221,10 @@ table = vmap mapView $ vmix highlights (lmap (proj2L 0) (vmix (vmix rows deletes
     mapView :: View (ProdV (ListV (ProdV Attr HTML)) (ProdV (ProdV (ListV (ProdV HTML HTML)) (ListV HTML)) (ListV (Attr :~> (HTML :~> (HTML :~> (HTML :~> HTML))))))) m -> View (ListV HTML) m
     mapView (Pair (ViewList highlights) (Pair (Pair (ViewList rows) (ViewList deletes)) (ViewList templates))) = ViewList $ zipWith4 f highlights rows deletes templates
     f :: View (ProdV Attr HTML) m -> View (ProdV HTML HTML) m -> View HTML m -> View (Attr :~> (HTML :~> (HTML :~> (HTML :~> HTML)))) m -> View HTML m
-    f (Pair attr button) (Pair index label) delete (Holed template) = 
-      let Holed template2 = template id attr
-          Holed template3 = template2 id index
-          Holed template4 = template3 id button
-          in template4 id delete
+    f (Pair attr button) (Pair index label) delete template = 
+      template <~| attr <~| index <~| button <~| delete
 
-template :: ElmApp (UnitU (Sum Natural)) (UnitU (Sum Natural)) (HTML :~> (ListV HTML :~> HTML))
+template :: ElmApp (UnitU (Sum Natural)) (UnitU (Sum Natural)) (HTML :~> ListV HTML :~> HTML)
 template = fromView $ \_ -> Holed (\_f (Base jumbotron) -> Holed (\f1 (ViewList rows) -> 
     Base $ H.div_ [ H.class_ "container" ] 
                   [ f1 <$> jumbotron,
@@ -238,7 +235,7 @@ template = fromView $ \_ -> Holed (\_f (Base jumbotron) -> Holed (\f1 (ViewList 
 
 benchmark = vmap f $ vmix (vmix (lmap (productL id (productL id (proj2L 0))) jumbotron) (lmap (proj2L (mkStdGen 0) . proj2L 0) table)) (lmap (unitL (0, (mkStdGen 0, (0, [])))) template)
   where
-    f :: View (ProdV (ProdV HTML (ListV HTML)) (HTML :~> (ListV HTML :~> HTML))) m -> View HTML m
+    f :: View (ProdV (ProdV HTML (ListV HTML)) (HTML :~> ListV HTML :~> HTML)) m -> View HTML m
     f (Pair (Pair jumbo rows) (Holed template)) =
       let Holed template2 = template id jumbo
       in template2 id rows

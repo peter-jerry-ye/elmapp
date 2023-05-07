@@ -2,6 +2,7 @@
 {-# LANGUAGE DerivingStrategies         #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE RecordWildCards            #-}
 
 -- Following is not needed in GHC 2021
 {-# LANGUAGE ExistentialQuantification  #-}
@@ -150,6 +151,7 @@ instance ViewType Attr where
   newtype View Attr m = Property (H.Attribute m)
     deriving newtype Functor
 
+infixr 1 :~>
 data (a :: VType) :~> (b :: VType)
 data ProdV a b
 
@@ -162,6 +164,9 @@ instance (ViewType a, ViewType b) => ViewType (ProdV a b) where
   data View (ProdV a b) msg = Pair (View a msg) (View b msg)
 instance (Functor (View a), Functor (View b)) => Functor (View (ProdV a b)) where
   fmap f (Pair a b) = Pair (fmap f a) (fmap f b)
+
+(<~|) :: View (v1 :~> v2) m -> View v1 m -> View v2 m
+(<~|) (Holed f) = f id
 
 data ElmApp u uview (v :: VType) where
   ElmApp :: (UpdateStructure uview, ViewType v) => ULens u uview -> (Model uview -> View v (Msg uview)) -> ElmApp u uview v
@@ -283,17 +288,14 @@ conditional predicate e1 e2 = vmap f $ vmix eConditional $ vmix e1 e2
     
 render :: forall u uv. UpdateStructure u => ElmApp u uv HTML -> Model u -> Maybe MisoString -> App (Model u) (Msg u)
 render (ElmApp l v) model mountPoint = App {
-  model  = model
-, update = updateModel
-, view   = viewModel
-, subs   = []
+  subs   = []
 , events = defaultEvents
 , initialAction = mempty
-, mountPoint = mountPoint
-, logLevel   = DebugPrerender
+, logLevel   = Off
+, ..
 }
   where
-    updateModel :: Msg u -> Model u -> Effect (Msg u) (Model u)
-    updateModel = \m s -> noEff $ act (Proxy @u) s m
-    viewModel :: Model u -> H.View (Msg u)
-    viewModel = \s -> (\(Base h) -> h) (fmap (trans l s) $ v (get l s))
+    update :: Msg u -> Model u -> Effect (Msg u) (Model u)
+    update = \m s -> noEff $ act (Proxy @u) s m
+    view :: Model u -> H.View (Msg u)
+    view = \s -> (\(Base h) -> h) (fmap (trans l s) $ v (get l s))
