@@ -1,6 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies      #-}
-{-# LANGUAGE TypeOperators     #-}
+-- Following is not needed in GHC 2021
+{-# LANGUAGE ExistentialQuantification  #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE GADTSyntax                 #-}
+{-# LANGUAGE RankNTypes                 #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE TypeOperators              #-}
 
 module Benchmark where
 
@@ -8,7 +15,7 @@ import Data.Kind        (Type)
 import Control.Category (Category (..))
 import Miso hiding (View)
 import qualified Miso.Html as H
-import Miso.String      (MisoString, unwords, pack, replicate)
+import Miso.String      (MisoString, unwords, pack, replicate, null)
 import Data.Semigroup   (Sum (..))
 import Data.List (zipWith4)
 import System.Random
@@ -90,6 +97,10 @@ generateRows amount lastId (rows, seed) = if amount == 0 then (rows, seed) else 
     noun :: MisoString
     noun = nouns !! in_
     newRows = rows ++ [ (id, unwords [adjective, colour, noun]) ]
+
+instance ElmlensMsg MisoString where
+  checkMempty = Miso.String.null
+  checkFail = const False
     
 data LabelU
 instance UpdateStructure LabelU where
@@ -102,7 +113,7 @@ buttonsConfig :: [(MisoString, MisoString, ULens (ProdU (RepU Int) (ProdU (RepU 
 buttonsConfig = [
   ("run", "Create 1,000 rows", 
     ULens { get = const (),
-            trans = \(index, (gen, ls)) (Sum m) -> let n = 1000 in (\(msgs, _, _, _) -> msgs) $ 
+            trans = \(index, (gen, ls)) (Sum m) -> if m == 0 then mempty else let n = 1 in (\(msgs, _, _, _) -> msgs) $ 
                 foldl (\(cumul, index, gen, l) _ -> 
                         let (newRows, newGen) = generateRows n index ([], gen) 
                         in (cumul <> (Replace $ index + n, (Replace newGen, Prelude.replicate l (ALDel 0) ++ zipWith ALIns [0..] newRows)), index + n, newGen, length newRows)) 
@@ -110,7 +121,7 @@ buttonsConfig = [
             create = const (0, (mkStdGen 0, []))}),
   ("runlots", "Create 10,000 rows",
     ULens { get = const (),
-            trans = \(index, (gen, ls)) (Sum m) -> let n = 10000 in (\(msgs, _, _, _) -> msgs) $ 
+            trans = \(index, (gen, ls)) (Sum m) -> if m == 0 then mempty else let n = 10 in (\(msgs, _, _, _) -> msgs) $ 
                 foldl (\(cumul, index, gen, l) _ -> 
                         let (newRows, newGen) = generateRows n index ([], gen) 
                         in (cumul <> (Replace $ index + n, (Replace newGen, Prelude.replicate l (ALDel 0) ++ zipWith ALIns [0..] newRows)), index + n, newGen, length newRows)) 

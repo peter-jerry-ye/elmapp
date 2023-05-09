@@ -30,10 +30,11 @@ class (Semigroup (Mask u), UpdateStructure u) => MaskedUpdateStructure (u :: Typ
 instance (MaskedUpdateStructure u1, MaskedUpdateStructure u2) => MaskedUpdateStructure (DupU u1 u2) where
   type Mask (DupU u1 u2) = (Maybe (Mask u1), Maybe (Mask u2))
   mask _ MNone = (Nothing, Nothing)
-  mask _ (MLeft m) | m == mempty = (Nothing, Nothing)
+  mask _ MConflict = (Nothing, Nothing)
+  mask _ (MLeft m) | checkMempty m = (Nothing, Nothing)
                    | otherwise   = (Just (mask (Proxy @u1) m), Nothing)
-  mask _ (MRight m) | m == mempty = (Nothing, Nothing)
-                    | otherwise   = (Nothing, Just (mask (Proxy @u2) m))
+  mask _ (MRight m) | checkMempty m  = (Nothing, Nothing)
+                    | otherwise      = (Nothing, Just (mask (Proxy @u2) m))
 
   eqv _ (mask1, mask2) (Dup m1 m2) (Dup m1' m2') = eqv' (Proxy @u1) mask1 m1 m1' && eqv' (Proxy @u2) mask2 m2 m2'
     where eqv' _ Nothing _ _ = True
@@ -57,11 +58,11 @@ instance (MaskedUpdateStructure u) => MaskedUpdateStructure (ListU u) where
   eqv _ Nothing ms ms' = ms == ms'
 
 translateEmptyProp :: (UpdateStructure u1, UpdateStructure u2) => ULens u1 u2 -> Model u1 -> Bool
-translateEmptyProp lens model = trans lens model mempty == mempty
+translateEmptyProp lens model = checkMempty $ trans lens model mempty
 
 translateCombineProp :: forall u1 u2. (UpdateStructure u1, UpdateStructure u2) => ULens u1 u2 -> Model u1 -> Msg u2 -> Msg u2 -> Bool
 translateCombineProp lens m1 msg2 msg2' = 
-  (msg1 <> msg1') == trans lens m1 (msg2 <> msg2')
+  checkFail (msg1 <> msg1') || checkFail (msg2 <> msg2') || (msg1 <> msg1') == trans lens m1 (msg2 <> msg2')
     where
       msg1 = trans lens m1 msg2
       msg1' = trans lens (act (Proxy @u1) m1 msg1) msg2'

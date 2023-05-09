@@ -37,8 +37,8 @@ instance Eq a => MaskedUpdateStructure (RepU a) where
   type Mask (RepU a) = ()
   mask _ _ = ()
   eqv _ _ = (==)
-  
-instance (Monoid a, Eq a) => MaskedUpdateStructure (UnitU a) where
+
+instance (ElmlensMsg a) => MaskedUpdateStructure (UnitU a) where
   type Mask (UnitU a) = ()
   mask _ _ = ()
   eqv _ _ = (==)
@@ -74,11 +74,9 @@ testULens lens = do
   quickCheck $ consistencyProp lens
   quickCheck $ createProp lens
   quickCheck $ translateEmptyProp lens
-  quickCheck $ translateCombineProp' lens
+  quickCheck $ translateCombineProp lens
 
 testElmApp (ElmApp lens _) = testULens lens
-
-test1 = TestCase (assertEqual "1==1" 1 1)
 
 test2 :: ULens IntU (DupU IntU IntU)
 test2 = splitL id id

@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies      #-}
 {-# LANGUAGE TypeOperators     #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module Apps where
 
@@ -15,6 +16,10 @@ import Prelude hiding (id, product, (.))
 import Elmlens
 
 data IntU
+
+instance (Eq a, Num a) => ElmlensMsg (Sum a) where
+  checkMempty s = s == mempty
+  checkFail _ = False
 
 instance UpdateStructure IntU where
   type Model IntU = Int
@@ -41,6 +46,11 @@ instance Semigroup (ScratchMsg a) where
 
 instance Monoid (ScratchMsg a) where
   mempty = Keep
+
+instance Eq a => ElmlensMsg (ScratchMsg a) where
+  checkMempty Keep = True
+  checkMempty _    = False
+  checkFail _ = False
 
 instance (Eq a) => UpdateStructure (RepU a) where
   type Model (RepU a) = a
@@ -74,7 +84,7 @@ highlightDemoApp = render highlightDemo (0, [(), (), (), (), ()])
 
 data UnitU (a :: Type)
 
-instance (Monoid a, Eq a) => UpdateStructure (UnitU a) where
+instance (ElmlensMsg a) => UpdateStructure (UnitU a) where
   type Model (UnitU a) = ()
   type Msg (UnitU a) = a
 
