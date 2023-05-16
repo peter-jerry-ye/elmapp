@@ -7,6 +7,17 @@ import Data.Bifunctor (second, Bifunctor (first))
 import Miso (View)
 import Data.Map (singleton)
 
+type Counter = Int
+type CounterMsg = Int
+
+update :: CounterMsg -> Counter -> Counter
+update m i = i + m
+view :: Counter -> View CounterMsg
+view model = H.div_ [] [
+  H.button_ [ H.onClick $ 1 ] [ H.text "+" ],
+  H.label_ [] [ H.text $ (pack . show) model ],
+  H.button_ [ H.onClick $ -1 ] [ H.text "-"] ]
+
 newtype Name = Name MisoString
 newtype NameMsg = NameMsg MisoString
 
