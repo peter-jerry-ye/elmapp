@@ -9,11 +9,12 @@ import Data.Kind        (Type)
 import Control.Category (Category (..))
 import Miso hiding (View)
 import qualified Miso.Html as H
-import Miso.String
+import Miso.String (MisoString, pack, ms)
 import Data.Semigroup   (Sum (..))
 import Data.List        (zipWith)
 import Prelude hiding (id, product, (.))
 import Elmlens
+import Data.Map (singleton)
 
 data IntU
 
@@ -92,3 +93,56 @@ instance (ElmlensMsg a) => UpdateStructure (UnitU a) where
 
 unitL :: (UpdateStructure u) => Model u -> ULens u (UnitU a)
 unitL m = ULens { get = const (), trans = const mempty, create = const m }
+
+
+type NameU = RepU MisoString
+
+type AddrU = RepU MisoString
+
+name :: ElmApp NameU NameU HTML
+name = fromView $ \name -> Base $ H.div_ [] [
+  H.label_ [] [ H.text "Name: " ],
+  H.input_ [ H.value_ name, H.onInput Replace ] ]
+
+addr :: ElmApp AddrU AddrU HTML
+addr = fromView $ \addr -> Base $ H.div_ [] [
+  H.label_ [] [ H.text "Addr: " ],
+  H.input_ [ H.value_ addr, H.onInput Replace ] ]
+
+form :: ElmApp (ProdU NameU AddrU) (ProdU NameU AddrU) HTML
+form = vmap f $ product name addr
+  where f (Pair (Base vname) (Base vaddr)) = Base $ H.div_ [] [ vname, vaddr ]
+
+data ChildU
+newtype Child = Child Int deriving Eq
+
+instance UpdateStructure ChildU where
+  type Model ChildU = Child
+  type Msg ChildU = Sum Int
+
+  act _ (Child model) (Sum msg) = Child (model + msg)
+ 
+data ParentU
+newtype Parent = Parent Bool deriving Eq
+
+instance UpdateStructure ParentU where
+  type Model ParentU = Parent
+  type Msg ParentU = Sum Int
+
+  act _ (Parent True) (Sum msg) = Parent (even msg)
+  act _ (Parent False) (Sum msg) = Parent (odd msg)
+
+child :: ElmApp ChildU ChildU (Attr :~> HTML)
+child = fromView $ \(Child model) -> Holed $ \f (Property attr) -> Base $ H.div_ [] [
+  H.button_ [ H.onClick $ f $ Sum 1 ] [ H.text "To Child " ],
+  H.label_ [] [ H.text $ pack ("Child: " ++ show model) ],
+  H.button_ [ attr ] [ H.text "To Parent" ] ]
+
+parent :: ElmApp ParentU ParentU (ProdV Attr (HTML :~> HTML))
+parent = fromView $ \(Parent model) -> Pair (Property $ onClick $ Sum 1) (Holed $ \f (Base child) -> Base $ 
+  H.div_ [ H.style_ $ singleton "background" $ if model then "red" else "blue" ] [ child ] )
+
+decorated :: ElmApp (ProdU ChildU ParentU) (ProdU ChildU ParentU) HTML
+decorated = vmap f $ product child parent
+  where
+    f (Pair childTemplate (Pair onClick parentTemplate)) = parentTemplate <~| (childTemplate <~| onClick)
