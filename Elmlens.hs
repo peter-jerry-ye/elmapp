@@ -19,6 +19,8 @@
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use bimap" #-}
 {-# HLINT ignore "Use <$>" #-}
+{-# HLINT ignore "Unused LANGUAGE pragma" #-}
+{-# HLINT ignore "Use tuple-section" #-}
 
 module Elmlens where
 
@@ -177,8 +179,7 @@ instance Functor (View v) where
 (<~|) :: View (v1 :~> v2) m -> View v1 m -> View v2 m
 (<~|) (Holed f) = f id
 
-data ElmApp u uview v where
-  ElmApp :: (UpdateStructure uview) => ULens u uview -> (Model uview -> View v (Msg uview)) -> ElmApp u uview v
+data ElmApp u uview v = ElmApp (ULens u uview) (Model uview -> View v (Msg uview))
 
 fromView :: (UpdateStructure u) => (Model u -> View v (Msg u)) -> ElmApp u u v
 fromView = ElmApp id
@@ -192,12 +193,12 @@ vmap f (ElmApp l h) = ElmApp l (f . h)
 vmap' :: ((Model uv -> View v (Msg uv)) -> (Model uv -> View v' (Msg uv))) -> ElmApp u uv v -> ElmApp u uv v'
 vmap' f (ElmApp l h) = ElmApp l (f h)
 
-vmix :: forall u uv uv' v v'. UpdateStructure u => ElmApp u uv v -> ElmApp u uv' v' -> ElmApp u (DupU uv uv') (ProdV v v')
+vmix :: forall u uv uv' v v'. (UpdateStructure u, UpdateStructure uv, UpdateStructure uv') => ElmApp u uv v -> ElmApp u uv' v' -> ElmApp u (DupU uv uv') (ProdV v v')
 vmix (ElmApp l1 view1) (ElmApp l2 view2) = 
   ElmApp (splitL l1 l2)
          (\(Dup a b) -> ProdV (fmap MLeft (view1 a)) (fmap MRight (view2 b)))
 
-product :: forall u1 uv1 v1 u2 uv2 v2. ElmApp u1 uv1 v1 -> ElmApp u2 uv2 v2 -> ElmApp (ProdU u1 u2) (ProdU uv1 uv2) (ProdV v1 v2)
+product :: forall u1 uv1 v1 u2 uv2 v2. (UpdateStructure uv2, UpdateStructure uv1) => ElmApp u1 uv1 v1 -> ElmApp u2 uv2 v2 -> ElmApp (ProdU u1 u2) (ProdU uv1 uv2) (ProdV v1 v2)
 product (ElmApp l1 view1) (ElmApp l2 view2) =
   ElmApp (productL l1 l2)
          (\(a, b) -> ProdV (fmap (embFst (Proxy @uv1) (Proxy @uv2)) (view1 a)) (fmap (embSnd (Proxy @uv1) (Proxy @uv2)) (view2 b)))
@@ -275,7 +276,7 @@ filterList predicate  = vmap' viewFilteredList
       (_xs1, xi : _xs2) -> ALRep xi da : f n ls dbs
     f n ls (ALReorder reorder : dbs) = ALReorder (fromList $ fmap (\(from, to) -> (ls !! from, ls !! to)) $ toList reorder) : f n ls dbs
 
-filterE :: forall u uv v. (UpdateStructure u) => (Model u -> Bool) -> ElmApp (ListU u) uv (ListV v) -> ElmApp (ListU u) (DupU (ListU u) uv) (ListV v)
+filterE :: forall u uv v. (UpdateStructure u, UpdateStructure uv) => (Model u -> Bool) -> ElmApp (ListU u) uv (ListV v) -> ElmApp (ListU u) (DupU (ListU u) uv) (ListV v)
 filterE predicate e = vmap f $ vmix eFilter e
   where
     f :: View (ProdV (ListV v :~> ListV v) (ListV v)) msg -> View (ListV v) msg
@@ -284,7 +285,7 @@ filterE predicate e = vmap f $ vmix eFilter e
     eFilter = fromView $ \ls -> Holed (\_ (ListV vs) -> ListV $ fmap fst $ filter (predicate . snd) $ zip vs ls)
     
 
-conditional :: forall u uv1 uv2 v. (UpdateStructure u) => (Model u -> Bool)
+conditional :: forall u uv1 uv2 v. (UpdateStructure u, UpdateStructure uv1, UpdateStructure uv2) => (Model u -> Bool)
   -> ElmApp u uv1 v -> ElmApp u uv2 v -> ElmApp u (DupU u (DupU uv1 uv2)) v
 conditional predicate e1 e2 = vmap f $ vmix eConditional $ vmix e1 e2
   where
