@@ -154,61 +154,53 @@ proj2L m1 =
   }
 
 type VType = Type
-class Functor (View v) => ViewType (v :: VType) where
-  data View v :: Type -> Type
-
-data HTML
-
-instance ViewType HTML where
-  newtype View HTML m = Base (H.View m)
-    deriving newtype Functor
-
+data Html
 data Attr
-instance ViewType Attr where
-  newtype View Attr m = Property (H.Attribute m)
-    deriving newtype Functor
-
-infixr 1 :~>
 data (a :: VType) :~> (b :: VType)
 data ProdV a b
+data ListV v
 
-instance (ViewType a, ViewType b) => ViewType (a :~> b) where
-  data View (a :~> b) msg = Holed (forall m. (msg -> m) -> View a m -> View b m)
-instance Functor (View (a :~> b)) where
+data View (v :: VType) m where
+  Html :: H.View m -> View Html m
+  Attr :: H.Attribute m -> View Attr m
+  Holed :: (forall m. (msg -> m) -> View v1 m -> View v2 m) -> View (v1 :~> v2) msg
+  ProdV :: View v1 msg -> View v2 msg -> View (ProdV v1 v2) msg
+  ListV :: [ View v msg ] -> View (ListV v) msg
+
+instance Functor (View v) where
+  fmap f (Html m) = Html $ fmap f m
+  fmap f (Attr m) = Attr $ fmap f m
   fmap f (Holed h) = Holed $ \emb -> h (emb . f)
-
-instance (ViewType a, ViewType b) => ViewType (ProdV a b) where
-  data View (ProdV a b) msg = Pair (View a msg) (View b msg)
-instance (Functor (View a), Functor (View b)) => Functor (View (ProdV a b)) where
-  fmap f (Pair a b) = Pair (fmap f a) (fmap f b)
+  fmap f (ProdV v1 v2) = ProdV (fmap f v1) (fmap f v2)
+  fmap f (ListV vs) = ListV $ fmap (fmap f) vs
 
 (<~|) :: View (v1 :~> v2) m -> View v1 m -> View v2 m
 (<~|) (Holed f) = f id
 
-data ElmApp u uview (v :: VType) where
-  ElmApp :: (UpdateStructure uview, ViewType v) => ULens u uview -> (Model uview -> View v (Msg uview)) -> ElmApp u uview v
+data ElmApp u uview v where
+  ElmApp :: (UpdateStructure uview) => ULens u uview -> (Model uview -> View v (Msg uview)) -> ElmApp u uview v
 
-fromView :: (UpdateStructure u, ViewType v) => (Model u -> View v (Msg u)) -> ElmApp u u v
+fromView :: (UpdateStructure u) => (Model u -> View v (Msg u)) -> ElmApp u u v
 fromView = ElmApp id
 
 lmap :: ULens u u' -> ElmApp u' uv v -> ElmApp u uv v
 lmap ul (ElmApp l h) = ElmApp (l . ul) h
 
-vmap :: ViewType v' => (View v (Msg uv) -> View v' (Msg uv)) -> ElmApp u uv v -> ElmApp u uv v'
+vmap :: (View v (Msg uv) -> View v' (Msg uv)) -> ElmApp u uv v -> ElmApp u uv v'
 vmap f (ElmApp l h) = ElmApp l (f . h)
 
-vmap' :: ViewType v' => ((Model uv -> View v (Msg uv)) -> (Model uv -> View v' (Msg uv))) -> ElmApp u uv v -> ElmApp u uv v'
+vmap' :: ((Model uv -> View v (Msg uv)) -> (Model uv -> View v' (Msg uv))) -> ElmApp u uv v -> ElmApp u uv v'
 vmap' f (ElmApp l h) = ElmApp l (f h)
 
 vmix :: forall u uv uv' v v'. UpdateStructure u => ElmApp u uv v -> ElmApp u uv' v' -> ElmApp u (DupU uv uv') (ProdV v v')
 vmix (ElmApp l1 view1) (ElmApp l2 view2) = 
   ElmApp (splitL l1 l2)
-         (\(Dup a b) -> Pair (fmap MLeft (view1 a)) (fmap MRight (view2 b)))
+         (\(Dup a b) -> ProdV (fmap MLeft (view1 a)) (fmap MRight (view2 b)))
 
 product :: forall u1 uv1 v1 u2 uv2 v2. ElmApp u1 uv1 v1 -> ElmApp u2 uv2 v2 -> ElmApp (ProdU u1 u2) (ProdU uv1 uv2) (ProdV v1 v2)
 product (ElmApp l1 view1) (ElmApp l2 view2) =
   ElmApp (productL l1 l2)
-         (\(a, b) -> Pair (fmap (embFst (Proxy @uv1) (Proxy @uv2)) (view1 a)) (fmap (embSnd (Proxy @uv1) (Proxy @uv2)) (view2 b)))
+         (\(a, b) -> ProdV (fmap (embFst (Proxy @uv1) (Proxy @uv2)) (view1 a)) (fmap (embSnd (Proxy @uv1) (Proxy @uv2)) (view2 b)))
 
 data ListU u
 
@@ -243,14 +235,6 @@ instance UpdateStructure u => UpdateStructure (ListU u) where
 
   act _ = foldl (actAtomicListMsg (Proxy @u))
 
-data ListV (v :: VType)
-
-instance ViewType v => ViewType (ListV v) where
-  newtype View (ListV v) msg = ViewList [ View v msg ]
-
-instance Functor (View v) => Functor (View (ListV v)) where
-  fmap f (ViewList xs) = ViewList $ map (fmap f) xs
-
 mapL :: forall u1 u2. UpdateStructure u1 => ULens u1 u2 -> ULens (ListU u1) (ListU u2)
 mapL l = ULens { get = map (get l), trans = tr, create = map (create l) }
   where
@@ -271,9 +255,9 @@ list (ElmApp lens h) =
   ElmApp (mapL lens) viewList
   where
     viewList :: Model (ListU uv) -> View (ListV v) (Msg (ListU uv))
-    viewList xs = ViewList $ zipWith (\x i -> fmap (\msg -> [ALRep i msg]) $ h x) xs [0..]
+    viewList xs = ListV $ zipWith (\x i -> fmap (\msg -> [ALRep i msg]) $ h x) xs [0..]
 
-filterList :: forall u uv v. (ViewType v, UpdateStructure u) => (Model uv -> Bool) -> ElmApp u (ListU uv) v -> ElmApp u (ListU uv) v
+filterList :: forall u uv v. (UpdateStructure u) => (Model uv -> Bool) -> ElmApp u (ListU uv) v -> ElmApp u (ListU uv) v
 filterList predicate  = vmap' viewFilteredList
   where
     viewFilteredList ::  (Model (ListU uv) -> View v (Msg (ListU uv))) -> Model (ListU uv) -> View v (Msg (ListU uv))
@@ -291,24 +275,26 @@ filterList predicate  = vmap' viewFilteredList
       (_xs1, xi : _xs2) -> ALRep xi da : f n ls dbs
     f n ls (ALReorder reorder : dbs) = ALReorder (fromList $ fmap (\(from, to) -> (ls !! from, ls !! to)) $ toList reorder) : f n ls dbs
 
-filterE :: forall u uv v. (UpdateStructure u, ViewType v) => (Model u -> Bool) -> ElmApp (ListU u) uv (ListV v) -> ElmApp (ListU u) (DupU (ListU u) uv) (ListV v)
+filterE :: forall u uv v. (UpdateStructure u) => (Model u -> Bool) -> ElmApp (ListU u) uv (ListV v) -> ElmApp (ListU u) (DupU (ListU u) uv) (ListV v)
 filterE predicate e = vmap f $ vmix eFilter e
   where
-    f (Pair (Holed template) v) = template id v
+    f :: View (ProdV (ListV v :~> ListV v) (ListV v)) msg -> View (ListV v) msg
+    f (ProdV (Holed template) v) = template id v
     eFilter :: ElmApp (ListU u) (ListU u) (ListV v :~> ListV v)
-    eFilter = fromView $ \ls -> Holed (\_ (ViewList vs) -> ViewList $ fmap fst $ filter (predicate . snd) $ zip vs ls)
+    eFilter = fromView $ \ls -> Holed (\_ (ListV vs) -> ListV $ fmap fst $ filter (predicate . snd) $ zip vs ls)
     
 
-conditional :: forall u uv1 uv2 v. (UpdateStructure u, ViewType v) => (Model u -> Bool)
+conditional :: forall u uv1 uv2 v. (UpdateStructure u) => (Model u -> Bool)
   -> ElmApp u uv1 v -> ElmApp u uv2 v -> ElmApp u (DupU u (DupU uv1 uv2)) v
 conditional predicate e1 e2 = vmap f $ vmix eConditional $ vmix e1 e2
   where
-    f (Pair (Holed template) (Pair v1 v2)) = let Holed template2 = template id v1 in template2 id v2
+    f :: View (ProdV (v :~> (v :~> v)) (ProdV v v)) msg -> View v msg
+    f (ProdV template (ProdV v1 v2)) = template <~| v1 <~| v2
     eConditional :: ElmApp u u (v :~> (v :~> v))
     eConditional = fromView $ \s -> Holed (\_ v1 -> 
                                     Holed (\f' v2 -> if predicate s then fmap f' v1 else v2))
     
-render :: forall u uv. UpdateStructure u => ElmApp u uv HTML -> Model u -> Maybe MisoString -> App (Model u) (Msg u)
+render :: forall u uv. UpdateStructure u => ElmApp u uv Html -> Model u -> Maybe MisoString -> App (Model u) (Msg u)
 render (ElmApp l v) model mountPoint = App {
   subs   = []
 , events = defaultEvents
@@ -320,4 +306,4 @@ render (ElmApp l v) model mountPoint = App {
     update :: Msg u -> Model u -> Effect (Msg u) (Model u)
     update = \m s -> noEff $ act (Proxy @u) s m
     view :: Model u -> H.View (Msg u)
-    view = \s -> (\(Base h) -> h) (fmap (trans l s) $ v (get l s))
+    view = \s -> (\(Html h) -> h) (fmap (trans l s) $ v (get l s))
