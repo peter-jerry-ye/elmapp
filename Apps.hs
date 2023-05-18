@@ -28,8 +28,8 @@ instance UpdateStructure IntU where
 
   act _ n (Sum m) = n + m
 
-counter :: ElmApp IntU IntU HTML
-counter = fromView (\x -> Base $ H.div_ [] [
+counter :: ElmApp IntU IntU Html
+counter = fromView (\x -> Html $ H.div_ [] [
       H.button_ [ H.onClick $ Sum 1 ] [ H.text "+" ],
       H.text (ms x),
       H.button_ [ H.onClick $ Sum (-1) ] [ H.text "-" ] ])
@@ -62,24 +62,25 @@ instance (Eq a) => UpdateStructure (RepU a) where
 
 type BoolU = RepU Bool
 
-checkButton :: ElmApp BoolU BoolU HTML
-checkButton = fromView (\b -> Base $ H.input_ [ H.type_ "checkbox", H.checked_ b, H.onChecked (\(Checked x) -> Replace x) ]  )
+checkButton :: ElmApp BoolU BoolU Html
+checkButton = fromView (\b -> Html $ H.input_ [ H.type_ "checkbox", H.checked_ b, H.onChecked (\(Checked x) -> Replace x) ]  )
 
 type StringU = RepU MisoString
 
-highlightButton :: ElmApp (RepU ()) (RepU ()) (ListV Attr :~> HTML)
-highlightButton = fromView (\_ -> Holed $ \f (ViewList properties) -> Base $ H.button_ (fmap (\(Property p) -> p) properties) ["Click here"])
+highlightButton :: ElmApp (RepU ()) (RepU ()) (ListV Attr :~> Html)
+highlightButton = fromView (\_ -> Holed $ \f (ListV properties) -> Html $ H.button_ (fmap (\(Attr p) -> p) properties) ["Click here"])
 
 highlightProperties :: ElmApp (ProdU (RepU Int) (ListU (RepU ()))) (ProdU (RepU Int) (ListU (RepU ()))) (ListV (ListV Attr))
-highlightProperties = fromView (\(i, list) -> ViewList $ fmap (f i) [0..(Prelude.length list)])
+highlightProperties = fromView (\(i, list) -> ListV $ fmap (f i) [0..(Prelude.length list)])
   where
-    f i n = if n == i then ViewList [Property $ H.class_ "chosen"]
-                    else ViewList [Property $ H.class_ "not_chosen", Property $ H.onClick (Replace n, mempty)]
+    f i n = if n == i then ListV [Attr $ H.class_ "chosen"]
+                    else ListV [Attr $ H.class_ "not_chosen", Attr $ H.onClick (Replace n, mempty)]
 
 highlightDemo = vmap f $ vmix (lmap (proj2L 0) (list highlightButton )) highlightProperties 
   where
-    f (Pair (ViewList buttons) (ViewList properties)) = 
-      Base $ H.div_ [] ((\(Base h) -> h) <$> Prelude.zipWith (\(Holed template) ps -> template id ps) buttons properties)
+    f :: View (ProdV (ListV (v :~> Html)) (ListV v)) m -> View Html m
+    f (ProdV (ListV buttons) (ListV properties)) = 
+      Html $ H.div_ [] ((\(Html h) -> h) <$> Prelude.zipWith (<~|) buttons properties)
 
 highlightDemoApp = render highlightDemo (0, [(), (), (), (), ()])
 
@@ -99,19 +100,21 @@ type NameU = RepU MisoString
 
 type AddrU = RepU MisoString
 
-name :: ElmApp NameU NameU HTML
-name = fromView $ \name -> Base $ H.div_ [] [
+name :: ElmApp NameU NameU Html
+name = fromView $ \name -> Html $ H.div_ [] [
   H.label_ [] [ H.text "Name: " ],
   H.input_ [ H.value_ name, H.onInput Replace ] ]
 
-addr :: ElmApp AddrU AddrU HTML
-addr = fromView $ \addr -> Base $ H.div_ [] [
+addr :: ElmApp AddrU AddrU Html
+addr = fromView $ \addr -> Html $ H.div_ [] [
   H.label_ [] [ H.text "Addr: " ],
   H.input_ [ H.value_ addr, H.onInput Replace ] ]
 
-form :: ElmApp (ProdU NameU AddrU) (ProdU NameU AddrU) HTML
+form :: ElmApp (ProdU NameU AddrU) (ProdU NameU AddrU) Html
 form = vmap f $ product name addr
-  where f (Pair (Base vname) (Base vaddr)) = Base $ H.div_ [] [ vname, vaddr ]
+  where 
+    f :: View (ProdV Html Html) m -> View Html m
+    f (ProdV (Html vname) (Html vaddr)) = Html $ H.div_ [] [ vname, vaddr ]
 
 data ChildU
 newtype Child = Child Int deriving Eq
@@ -132,17 +135,18 @@ instance UpdateStructure ParentU where
   act _ (Parent True) (Sum msg) = Parent (even msg)
   act _ (Parent False) (Sum msg) = Parent (odd msg)
 
-child :: ElmApp ChildU ChildU (Attr :~> HTML)
-child = fromView $ \(Child model) -> Holed $ \f (Property attr) -> Base $ H.div_ [] [
+child :: ElmApp ChildU ChildU (Attr :~> Html)
+child = fromView $ \(Child model) -> Holed $ \f (Attr attr) -> Html $ H.div_ [] [
   H.button_ [ H.onClick $ f $ Sum 1 ] [ H.text "To Child " ],
   H.label_ [] [ H.text $ pack ("Child: " ++ show model) ],
   H.button_ [ attr ] [ H.text "To Parent" ] ]
 
-parent :: ElmApp ParentU ParentU (ProdV Attr (HTML :~> HTML))
-parent = fromView $ \(Parent model) -> Pair (Property $ onClick $ Sum 1) (Holed $ \f (Base child) -> Base $ 
+parent :: ElmApp ParentU ParentU (ProdV Attr (Html :~> Html))
+parent = fromView $ \(Parent model) -> ProdV (Attr $ onClick $ Sum 1) (Holed $ \f (Html child) -> Html $ 
   H.div_ [ H.style_ $ singleton "background" $ if model then "red" else "blue" ] [ child ] )
 
-decorated :: ElmApp (ProdU ChildU ParentU) (ProdU ChildU ParentU) HTML
+decorated :: ElmApp (ProdU ChildU ParentU) (ProdU ChildU ParentU) Html
 decorated = vmap f $ product child parent
   where
-    f (Pair childTemplate (Pair onClick parentTemplate)) = parentTemplate <~| (childTemplate <~| onClick)
+    f :: View (ProdV (Attr :~> Html) (ProdV Attr (Html :~> Html))) m -> View Html m
+    f (ProdV childTemplate (ProdV onClick parentTemplate)) = parentTemplate <~| (childTemplate <~| onClick)

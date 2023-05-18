@@ -149,8 +149,8 @@ buttonsConfig = [
 
 -- TODO When a button is clicked multiple times, will the message be truncated into one?
 
-btnPrimaryBlock :: MisoString -> MisoString -> ElmApp (UnitU (Sum Natural)) (UnitU (Sum Natural)) HTML
-btnPrimaryBlock buttonId label = fromView $ \_ -> Base $ 
+btnPrimaryBlock :: MisoString -> MisoString -> ElmApp (UnitU (Sum Natural)) (UnitU (Sum Natural)) Html
+btnPrimaryBlock buttonId label = fromView $ \_ -> Html $ 
     H.div_ [ H.class_ "col-sm-6 smallpad" ]
            [ H.button_ [ H.type_ "button",
                          H.class_ "btn btn-primary btn-block",
@@ -185,38 +185,38 @@ buttons = vmix ((\(buttonId, label, lens) -> lmap lens $ btnPrimaryBlock buttonI
         $ vmix ((\(buttonId, label, lens) -> lmap lens $ btnPrimaryBlock buttonId label) $ buttonsConfig !! 4)
                ((\(buttonId, label, lens) -> lmap lens $ btnPrimaryBlock buttonId label) $ buttonsConfig !! 5)
                     
-jumbotronTemplate :: ElmApp (UnitU (Sum Natural)) (UnitU (Sum Natural)) (ListV HTML :~> HTML)
-jumbotronTemplate = fromView $ \_ ->  Holed (\_f (ViewList buttons) -> 
-    Base (H.div_ [ H.class_ "jumbotron" ]
+jumbotronTemplate :: ElmApp (UnitU (Sum Natural)) (UnitU (Sum Natural)) (ListV Html :~> Html)
+jumbotronTemplate = fromView $ \_ ->  Holed (\_f (ListV buttons) -> 
+    Html (H.div_ [ H.class_ "jumbotron" ]
                  [ H.div_ [ H.class_ "row" ]
                           [ H.div_ [ H.class_ "col-md-6" ]
                                    [ H.h1_ [] [ H.text "Elmlens (non-keyed)" ]],
-                            H.div_ [ H.class_ "col-md-6"] (fmap (\(Base b) -> b) buttons) ]]))
+                            H.div_ [ H.class_ "col-md-6"] (fmap (\(Html b) -> b) buttons) ]]))
 
-jumbotron = vmap (\(Pair (Holed template) (Pair h1 (Pair h2 (Pair h3 (Pair h4 (Pair h5 h6)))))) -> template id $ ViewList [h1, h2, h3, h4, h5, h6] ) 
+jumbotron = vmap (\(ProdV (Holed template) (ProdV h1 (ProdV h2 (ProdV h3 (ProdV h4 (ProdV h5 h6)))))) -> template id $ ListV [h1, h2, h3, h4, h5, h6] ) 
   $ vmix (lmap (unitL (0, (mkStdGen 0, []))) jumbotronTemplate) buttons
 
-deletes :: UpdateStructure u => ElmApp (ListU u) (ListU u) (ListV HTML)
-deletes = fromView $ \ls -> ViewList $ fmap (\i -> Base $ 
+deletes :: UpdateStructure u => ElmApp (ListU u) (ListU u) (ListV Html)
+deletes = fromView $ \ls -> ListV $ fmap (\i -> Html $ 
     H.a_ [ H.onClick [ALDel i]] 
          [ H.span_ [ H.class_ "glyphicon glyphicon-remove", H.boolProp "aria-hidden" True ] [] ] ) 
     [0 .. (length ls)]
 
 highlights :: ElmApp (ProdU (RepU Int) (ListU (ProdU (RepU Int) LabelU)))
                      (ProdU (RepU Int) (ListU (ProdU (RepU Int) LabelU)))
-                     (ListV (ProdV Attr HTML))
-highlights = fromView $ \(selected, ls) -> ViewList $ fmap (\(id, label) -> 
-    Pair ( Property $ H.classList_ [ ("danger", selected == id) ])
-         ( Base $ H.a_ [H.onClick (Replace id, mempty)] [ text label ]) )
+                     (ListV (ProdV Attr Html))
+highlights = fromView $ \(selected, ls) -> ListV $ fmap (\(id, label) -> 
+    ProdV ( Attr $ H.classList_ [ ("danger", selected == id) ])
+         ( Html $ H.a_ [H.onClick (Replace id, mempty)] [ text label ]) )
     ls
 
-rowTemplate :: ElmApp (UnitU (Sum Natural)) (UnitU (Sum Natural)) (Attr :~> HTML :~> HTML :~> HTML :~> HTML)
+rowTemplate :: ElmApp (UnitU (Sum Natural)) (UnitU (Sum Natural)) (Attr :~> Html :~> Html :~> Html :~> Html)
 rowTemplate = fromView $ \_ -> 
-  Holed (\_f (Property attr) -> 
-  Holed (\f1 (Base h1) ->
-  Holed (\f2 (Base h2) ->
-  Holed (\f3 (Base h3) -> 
-    Base (H.tr_ [ f3 . f2 . f1 <$> attr]
+  Holed (\_f (Attr attr) -> 
+  Holed (\f1 (Html h1) ->
+  Holed (\f2 (Html h2) ->
+  Holed (\f3 (Html h3) -> 
+    Html (H.tr_ [ f3 . f2 . f1 <$> attr]
          [ H.td_ [ H.class_ "col-md-1" ] [ f3 . f2 <$> h1 ],
            H.td_ [ H.class_ "col-md-4" ] [ f3 <$> h2 ],
            H.td_ [ H.class_ "col-md-1" ] [ h3 ],
@@ -224,31 +224,29 @@ rowTemplate = fromView $ \_ ->
 
 tableTemplate = list rowTemplate
 
-rows :: ElmApp (ListU (ProdU (RepU Int) LabelU)) (ListU (ProdU (RepU Int) LabelU)) (ListV (ProdV HTML HTML))
-rows = fromView $ \ls -> ViewList $ fmap (\(index, label) -> Pair (Base $ H.text $ pack $ show index) (Base $ H.text label)) ls
+rows :: ElmApp (ListU (ProdU (RepU Int) LabelU)) (ListU (ProdU (RepU Int) LabelU)) (ListV (ProdV Html Html))
+rows = fromView $ \ls -> ListV $ fmap (\(index, label) -> ProdV (Html $ H.text $ pack $ show index) (Html $ H.text label)) ls
 
 table = vmap mapView $ vmix highlights (lmap (proj2L 0) (vmix (vmix rows deletes) (lmap (mapL (unitL (0, ""))) tableTemplate)))
   where
-    mapView :: View (ProdV (ListV (ProdV Attr HTML)) (ProdV (ProdV (ListV (ProdV HTML HTML)) (ListV HTML)) (ListV (Attr :~> (HTML :~> (HTML :~> (HTML :~> HTML))))))) m -> View (ListV HTML) m
-    mapView (Pair (ViewList highlights) (Pair (Pair (ViewList rows) (ViewList deletes)) (ViewList templates))) = ViewList $ zipWith4 f highlights rows deletes templates
-    f :: View (ProdV Attr HTML) m -> View (ProdV HTML HTML) m -> View HTML m -> View (Attr :~> (HTML :~> (HTML :~> (HTML :~> HTML)))) m -> View HTML m
-    f (Pair attr button) (Pair index label) delete template = 
+    mapView :: View (ProdV (ListV (ProdV Attr Html)) (ProdV (ProdV (ListV (ProdV Html Html)) (ListV Html)) (ListV (Attr :~> (Html :~> (Html :~> (Html :~> Html))))))) m -> View (ListV Html) m
+    mapView (ProdV (ListV highlights) (ProdV (ProdV (ListV rows) (ListV deletes)) (ListV templates))) = ListV $ zipWith4 f highlights rows deletes templates
+    f :: View (ProdV Attr Html) m -> View (ProdV Html Html) m -> View Html m -> View (Attr :~> (Html :~> (Html :~> (Html :~> Html)))) m -> View Html m
+    f (ProdV attr button) (ProdV index label) delete template = 
       template <~| attr <~| index <~| button <~| delete
 
-template :: ElmApp (UnitU (Sum Natural)) (UnitU (Sum Natural)) (HTML :~> ListV HTML :~> HTML)
-template = fromView $ \_ -> Holed (\_f (Base jumbotron) -> Holed (\f1 (ViewList rows) -> 
-    Base $ H.div_ [ H.class_ "container" ] 
+template :: ElmApp (UnitU (Sum Natural)) (UnitU (Sum Natural)) (Html :~> ListV Html :~> Html)
+template = fromView $ \_ -> Holed (\_f (Html jumbotron) -> Holed (\f1 (ListV rows) -> 
+    Html $ H.div_ [ H.class_ "container" ] 
                   [ f1 <$> jumbotron,
                     H.table_ [ H.class_ "table table-hover table-striped test-data" ] [ 
-                      H.tbody_ [] (fmap (\(Base b) -> b) rows), 
+                      H.tbody_ [] (fmap (\(Html b) -> b) rows), 
                       H.span_ [ H.class_ "preloadicon glyphicon glyphicon-remove",
                                 H.boolProp "aria-hidden" True ] [] ]]))
 
 benchmark = vmap f $ vmix (vmix (lmap (productL id (productL id (proj2L 0))) jumbotron) (lmap (proj2L (mkStdGen 0) . proj2L 0) table)) (lmap (unitL (0, (mkStdGen 0, (0, [])))) template)
   where
-    f :: View (ProdV (ProdV HTML (ListV HTML)) (HTML :~> ListV HTML :~> HTML)) m -> View HTML m
-    f (Pair (Pair jumbo rows) (Holed template)) =
-      let Holed template2 = template id jumbo
-      in template2 id rows
+    f :: View (ProdV (ProdV Html (ListV Html)) (Html :~> ListV Html :~> Html)) m -> View Html m
+    f (ProdV (ProdV jumbo rows) template) = template <~| jumbo <~| rows
 
 benchmarkApp seed = render benchmark (0, (seed, (-1, [])))

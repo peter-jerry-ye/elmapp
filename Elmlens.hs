@@ -19,8 +19,8 @@
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use bimap" #-}
 {-# HLINT ignore "Use <$>" #-}
-{-# HLINT ignore "Unused LANGUAGE pragma" #-}
 {-# HLINT ignore "Use tuple-section" #-}
+{-# HLINT ignore "Unused LANGUAGE pragma" #-}
 
 module Elmlens where
 
@@ -154,6 +154,8 @@ proj2L m1 =
     trans = \_ m -> (mempty, m),
     create = \m2 -> (m1, m2)
   }
+
+infixr 1 :~>
 
 type VType = Type
 data Html

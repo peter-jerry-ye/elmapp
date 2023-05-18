@@ -40,42 +40,44 @@ instance UpdateStructure TaskInputU where
   act pu (str, Just _)    (Edit e : xs) = act pu (str, Just e) xs
   act pu m (_ : xs) = act pu m xs -- Maybe runtime error?
 
-taskInput :: ElmApp TaskInputU TaskInputU HTML
+taskInput :: ElmApp TaskInputU TaskInputU Html
 taskInput = fromView viewTask
   where
-    viewTask :: Model TaskInputU -> View HTML (Msg TaskInputU)
-    viewTask (str, Nothing) = Base $ H.label_ [ H.onDoubleClick [ Focus ] ] [ H.text str ]
-    viewTask (str, Just ed) = Base $ H.input_ [ H.value_ ed, H.onInput $ \s -> [ Edit s ], H.onChange $ const [ Commit ], H.onKeyDown $ \(KeyCode code) -> [ Cancel | code == 27 ] ]
+    viewTask :: Model TaskInputU -> View Html (Msg TaskInputU)
+    viewTask (str, Nothing) = Html $ H.label_ [ H.onDoubleClick [ Focus ] ] [ H.text str ]
+    viewTask (str, Just ed) = Html $ H.input_ [ H.value_ ed, H.onInput $ \s -> [ Edit s ], H.onChange $ const [ Commit ], H.onKeyDown $ \(KeyCode code) -> [ Cancel | code == 27 ] ]
 
-taskRow :: ElmApp (ProdU BoolU TaskInputU) (ProdU BoolU TaskInputU) (HTML :~> HTML)
+taskRow :: ElmApp (ProdU BoolU TaskInputU) (ProdU BoolU TaskInputU) (Html :~> Html)
 taskRow = vmap f (product checkButton taskInput)
   where
-    f :: View (ProdV HTML HTML) (Msg (ProdU BoolU TaskInputU)) -> View (HTML :~> HTML) (Msg (ProdU BoolU TaskInputU))
-    f (Pair (Base h1) (Base h2)) = Holed $ \f (Base h) -> Base $ H.div_ [] [ fmap f h1, fmap f h2, h ]
+    f :: View (ProdV Html Html) (Msg (ProdU BoolU TaskInputU)) -> View (Html :~> Html) (Msg (ProdU BoolU TaskInputU))
+    f (ProdV (Html h1) (Html h2)) = Holed $ \f (Html h) -> Html $ H.div_ [] [ fmap f h1, fmap f h2, h ]
 
 deleteButtons = fromView view
   where
-    view :: Model (ListU (ProdU BoolU TaskInputU)) -> View (ListV HTML) (Msg (ListU (ProdU BoolU TaskInputU)))
-    view list = ViewList $ Data.List.zipWith (\index _ -> Base $ H.button_ [ H.onClick [ ALDel index ] ] [ H.text "Delete" ]) [0..] list
+    view :: Model (ListU (ProdU BoolU TaskInputU)) -> View (ListV Html) (Msg (ListU (ProdU BoolU TaskInputU)))
+    view list = ListV $ Data.List.zipWith (\index _ -> Html $ H.button_ [ H.onClick [ ALDel index ] ] [ H.text "Delete" ]) [0..] list
 
 tasks = vmap f $ vmix (list taskRow) deleteButtons
   where
-    f (Pair (ViewList v1) (ViewList v2)) = ViewList $ Data.List.zipWith (\(Holed template) button -> template id button) v1 v2
+    f :: View (ProdV (ListV (v :~> Html)) (ListV v)) m -> View (ListV Html) m
+    f (ProdV (ListV v1) (ListV v2)) = ListV $ Data.List.zipWith (<~|) v1 v2
 
 unfinishedTasks = filterE (not . fst) tasks
 
 finishedTasks = filterE fst tasks
 
-newTask :: ElmApp (ProdU StringU (ListU (ProdU BoolU TaskInputU))) (ProdU StringU (ListU (ProdU BoolU TaskInputU))) HTML
+newTask :: ElmApp (ProdU StringU (ListU (ProdU BoolU TaskInputU))) (ProdU StringU (ListU (ProdU BoolU TaskInputU))) Html
 newTask = fromView (\(str, ls) -> 
-    Base $ H.input_ [ 
+    Html $ H.input_ [ 
       H.value_ str, 
       H.onInput $ \s -> (Replace s, [] ), 
       H.onChange $ const (Replace "", [ ALIns (Prelude.length ls) (False, (str, Nothing)) ] ) ] )
 
 todoWithoutFilter = vmap f $ vmix newTask (lmap (proj2L "") tasks)
   where
-    f (Pair v1 (ViewList v2)) = Base $ H.div_ [] $ fmap (\(Base h) -> h) (v1 : v2)
+    f :: View (ProdV Html (ListV Html)) m -> View Html m
+    f (ProdV v1 (ListV v2)) = Html $ H.div_ [] $ fmap (\(Html h) -> h) (v1 : v2)
 
 todoWithoutFilterApp = render todoWithoutFilter ("", [])
 
@@ -86,11 +88,11 @@ data TaskFilter =
 
 type TaskFilterU = RepU TaskFilter
 
-taskFilterSwitch :: ElmApp TaskFilterU TaskFilterU HTML
+taskFilterSwitch :: ElmApp TaskFilterU TaskFilterU Html
 taskFilterSwitch = fromView view
   where
-    view :: Model TaskFilterU -> View HTML (Msg TaskFilterU)
-    view filter = Base $ H.div_ [] [
+    view :: Model TaskFilterU -> View Html (Msg TaskFilterU)
+    view filter = Html $ H.div_ [] [
       H.input_ [ H.type_ "radio", H.checked_ $ filter == DisplayAll, H.onChange $ \_ -> Replace DisplayAll ],
       H.label_ [] [ text "All" ],
       H.input_ [ H.type_ "radio", H.checked_ $ filter == Doing, H.onChange $ \_ -> Replace Doing ],
@@ -107,8 +109,9 @@ filteredTasks =
 
 todomvc = vmap f $ vmix (lmap (productL id (proj2L DisplayAll)) newTask) (lmap (proj2L "") filteredTasks)
   where
-    f (Pair (Base inputV) (Pair (Base filterV) (ViewList tasksV))) = 
-        Base $ H.div_ [] $ [ inputV, filterV ] ++ fmap (\(Base v) -> v) tasksV
+    f :: View (ProdV Html (ProdV Html (ListV Html))) m -> View Html m
+    f (ProdV (Html inputV) (ProdV (Html filterV) (ListV tasksV))) = 
+        Html $ H.div_ [] $ [ inputV, filterV ] ++ fmap (\(Html v) -> v) tasksV
 
 todomvcapp = render todomvc ("", (DisplayAll, []))
 
