@@ -76,7 +76,7 @@ highlightProperties = fromView (\(i, list) -> ListV $ fmap (f i) [0..(Prelude.le
     f i n = if n == i then ListV [Attr $ H.class_ "chosen"]
                     else ListV [Attr $ H.class_ "not_chosen", Attr $ H.onClick (Replace n, mempty)]
 
-highlightDemo = vmap f $ vmix (lmap (proj2L 0) (list highlightButton )) highlightProperties 
+highlightDemo = vmap f $ dup (lmap (proj2L 0) (list highlightButton )) highlightProperties 
   where
     f :: View (ProdV (ListV (v :~> Html)) (ListV v)) m -> View Html m
     f (ProdV (ListV buttons) (ListV properties)) = 

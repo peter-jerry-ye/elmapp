@@ -58,7 +58,7 @@ deleteButtons = fromView view
     view :: Model (ListU (ProdU BoolU TaskInputU)) -> View (ListV Html) (Msg (ListU (ProdU BoolU TaskInputU)))
     view list = ListV $ Data.List.zipWith (\index _ -> Html $ H.button_ [ H.onClick [ ALDel index ] ] [ H.text "Delete" ]) [0..] list
 
-tasks = vmap f $ vmix (list taskRow) deleteButtons
+tasks = vmap f $ dup (list taskRow) deleteButtons
   where
     f :: View (ProdV (ListV (v :~> Html)) (ListV v)) m -> View (ListV Html) m
     f (ProdV (ListV v1) (ListV v2)) = ListV $ Data.List.zipWith (<~|) v1 v2
@@ -74,7 +74,7 @@ newTask = fromView (\(str, ls) ->
       H.onInput $ \s -> (Replace s, [] ), 
       H.onChange $ const (Replace "", [ ALIns (Prelude.length ls) (False, (str, Nothing)) ] ) ] )
 
-todoWithoutFilter = vmap f $ vmix newTask (lmap (proj2L "") tasks)
+todoWithoutFilter = vmap f $ dup newTask (lmap (proj2L "") tasks)
   where
     f :: View (ProdV Html (ListV Html)) m -> View Html m
     f (ProdV v1 (ListV v2)) = Html $ H.div_ [] $ fmap (\(Html h) -> h) (v1 : v2)
@@ -107,7 +107,7 @@ filteredTasks =
                             (product taskFilterSwitch unfinishedTasks)
                             (product taskFilterSwitch finishedTasks)
 
-todomvc = vmap f $ vmix (lmap (productL id (proj2L DisplayAll)) newTask) (lmap (proj2L "") filteredTasks)
+todomvc = vmap f $ dup (lmap (productL id (proj2L DisplayAll)) newTask) (lmap (proj2L "") filteredTasks)
   where
     f :: View (ProdV Html (ProdV Html (ListV Html))) m -> View Html m
     f (ProdV (Html inputV) (ProdV (Html filterV) (ListV tasksV))) = 

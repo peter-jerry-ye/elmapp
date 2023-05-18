@@ -168,7 +168,7 @@ instance Mixable (ElmApp u1 uv1 v1) u1 uv1 v1 where
   mix = id 
 
 instance (Mixable a u1 uv1 v1, Mixable b u2 uv2 v2) => Mixable (a, b) (ProdU u1 u2) (ProdU uv1 uv1) (ProdV v1 v2) where
-  mix a b = vmix (mix a) (mix b)
+  mix a b = dup (mix a) (mix b)
 
 pattern a |> b = (a, b)
 infixr |> 4 
@@ -178,11 +178,11 @@ mix (d1 |> d2 |> d3 |> d4 |> d5) ...
 -}
 
 -- buttons = fmap (\(buttonId, label, lens) -> lmap lens $ btnPrimaryBlock buttonId label) buttonsConfig
-buttons = vmix ((\(buttonId, label, lens) -> lmap lens $ btnPrimaryBlock buttonId label) $ head buttonsConfig)
-        $ vmix ((\(buttonId, label, lens) -> lmap lens $ btnPrimaryBlock buttonId label) $ buttonsConfig !! 1)
-        $ vmix ((\(buttonId, label, lens) -> lmap lens $ btnPrimaryBlock buttonId label) $ buttonsConfig !! 2)
-        $ vmix ((\(buttonId, label, lens) -> lmap lens $ btnPrimaryBlock buttonId label) $ buttonsConfig !! 3)
-        $ vmix ((\(buttonId, label, lens) -> lmap lens $ btnPrimaryBlock buttonId label) $ buttonsConfig !! 4)
+buttons = dup ((\(buttonId, label, lens) -> lmap lens $ btnPrimaryBlock buttonId label) $ head buttonsConfig)
+        $ dup ((\(buttonId, label, lens) -> lmap lens $ btnPrimaryBlock buttonId label) $ buttonsConfig !! 1)
+        $ dup ((\(buttonId, label, lens) -> lmap lens $ btnPrimaryBlock buttonId label) $ buttonsConfig !! 2)
+        $ dup ((\(buttonId, label, lens) -> lmap lens $ btnPrimaryBlock buttonId label) $ buttonsConfig !! 3)
+        $ dup ((\(buttonId, label, lens) -> lmap lens $ btnPrimaryBlock buttonId label) $ buttonsConfig !! 4)
                ((\(buttonId, label, lens) -> lmap lens $ btnPrimaryBlock buttonId label) $ buttonsConfig !! 5)
                     
 jumbotronTemplate :: ElmApp (UnitU (Sum Natural)) (UnitU (Sum Natural)) (ListV Html :~> Html)
@@ -194,7 +194,7 @@ jumbotronTemplate = fromView $ \_ ->  Holed (\_f (ListV buttons) ->
                             H.div_ [ H.class_ "col-md-6"] (fmap (\(Html b) -> b) buttons) ]]))
 
 jumbotron = vmap (\(ProdV (Holed template) (ProdV h1 (ProdV h2 (ProdV h3 (ProdV h4 (ProdV h5 h6)))))) -> template id $ ListV [h1, h2, h3, h4, h5, h6] ) 
-  $ vmix (lmap (unitL (0, (mkStdGen 0, []))) jumbotronTemplate) buttons
+  $ dup (lmap (unitL (0, (mkStdGen 0, []))) jumbotronTemplate) buttons
 
 deletes :: UpdateStructure u => ElmApp (ListU u) (ListU u) (ListV Html)
 deletes = fromView $ \ls -> ListV $ fmap (\i -> Html $ 
@@ -227,7 +227,7 @@ tableTemplate = list rowTemplate
 rows :: ElmApp (ListU (ProdU (RepU Int) LabelU)) (ListU (ProdU (RepU Int) LabelU)) (ListV (ProdV Html Html))
 rows = fromView $ \ls -> ListV $ fmap (\(index, label) -> ProdV (Html $ H.text $ pack $ show index) (Html $ H.text label)) ls
 
-table = vmap mapView $ vmix highlights (lmap (proj2L 0) (vmix (vmix rows deletes) (lmap (mapL (unitL (0, ""))) tableTemplate)))
+table = vmap mapView $ dup highlights (lmap (proj2L 0) (dup (dup rows deletes) (lmap (mapL (unitL (0, ""))) tableTemplate)))
   where
     mapView :: View (ProdV (ListV (ProdV Attr Html)) (ProdV (ProdV (ListV (ProdV Html Html)) (ListV Html)) (ListV (Attr :~> (Html :~> (Html :~> (Html :~> Html))))))) m -> View (ListV Html) m
     mapView (ProdV (ListV highlights) (ProdV (ProdV (ListV rows) (ListV deletes)) (ListV templates))) = ListV $ zipWith4 f highlights rows deletes templates
@@ -244,7 +244,7 @@ template = fromView $ \_ -> Holed (\_f (Html jumbotron) -> Holed (\f1 (ListV row
                       H.span_ [ H.class_ "preloadicon glyphicon glyphicon-remove",
                                 H.boolProp "aria-hidden" True ] [] ]]))
 
-benchmark = vmap f $ vmix (vmix (lmap (productL id (productL id (proj2L 0))) jumbotron) (lmap (proj2L (mkStdGen 0) . proj2L 0) table)) (lmap (unitL (0, (mkStdGen 0, (0, [])))) template)
+benchmark = vmap f $ dup (dup (lmap (productL id (productL id (proj2L 0))) jumbotron) (lmap (proj2L (mkStdGen 0) . proj2L 0) table)) (lmap (unitL (0, (mkStdGen 0, (0, [])))) template)
   where
     f :: View (ProdV (ProdV Html (ListV Html)) (Html :~> ListV Html :~> Html)) m -> View Html m
     f (ProdV (ProdV jumbo rows) template) = template <~| jumbo <~| rows

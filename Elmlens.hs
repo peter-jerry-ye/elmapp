@@ -195,8 +195,8 @@ vmap f (ElmApp l h) = ElmApp l (f . h)
 vmap' :: ((Model uv -> View v (Msg uv)) -> (Model uv -> View v' (Msg uv))) -> ElmApp u uv v -> ElmApp u uv v'
 vmap' f (ElmApp l h) = ElmApp l (f h)
 
-vmix :: forall u uv uv' v v'. (UpdateStructure u, UpdateStructure uv, UpdateStructure uv') => ElmApp u uv v -> ElmApp u uv' v' -> ElmApp u (DupU uv uv') (ProdV v v')
-vmix (ElmApp l1 view1) (ElmApp l2 view2) = 
+dup :: forall u uv uv' v v'. (UpdateStructure u, UpdateStructure uv, UpdateStructure uv') => ElmApp u uv v -> ElmApp u uv' v' -> ElmApp u (DupU uv uv') (ProdV v v')
+dup (ElmApp l1 view1) (ElmApp l2 view2) = 
   ElmApp (splitL l1 l2)
          (\(Dup a b) -> ProdV (fmap MLeft (view1 a)) (fmap MRight (view2 b)))
 
@@ -279,7 +279,7 @@ filterList predicate  = vmap' viewFilteredList
     f n ls (ALReorder reorder : dbs) = ALReorder (fromList $ fmap (\(from, to) -> (ls !! from, ls !! to)) $ toList reorder) : f n ls dbs
 
 filterE :: forall u uv v. (UpdateStructure u, UpdateStructure uv) => (Model u -> Bool) -> ElmApp (ListU u) uv (ListV v) -> ElmApp (ListU u) (DupU (ListU u) uv) (ListV v)
-filterE predicate e = vmap f $ vmix eFilter e
+filterE predicate e = vmap f $ dup eFilter e
   where
     f :: View (ProdV (ListV v :~> ListV v) (ListV v)) msg -> View (ListV v) msg
     f (ProdV (Holed template) v) = template id v
@@ -289,7 +289,7 @@ filterE predicate e = vmap f $ vmix eFilter e
 
 conditional :: forall u uv1 uv2 v. (UpdateStructure u, UpdateStructure uv1, UpdateStructure uv2) => (Model u -> Bool)
   -> ElmApp u uv1 v -> ElmApp u uv2 v -> ElmApp u (DupU u (DupU uv1 uv2)) v
-conditional predicate e1 e2 = vmap f $ vmix eConditional $ vmix e1 e2
+conditional predicate e1 e2 = vmap f $ dup eConditional $ dup e1 e2
   where
     f :: View (ProdV (v :~> (v :~> v)) (ProdV v v)) msg -> View v msg
     f (ProdV template (ProdV v1 v2)) = template <~| v1 <~| v2
