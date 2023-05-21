@@ -100,18 +100,18 @@ type NameU = RepU MisoString
 
 type AddrU = RepU MisoString
 
-name :: ElmApp NameU NameU Html
-name = fromView $ \name -> Html $ H.div_ [] [
+nameApp :: ElmApp NameU NameU Html
+nameApp = fromView $ \name -> Html $ H.div_ [] [
   H.label_ [] [ H.text "Name: " ],
   H.input_ [ H.value_ name, H.onInput Replace ] ]
 
-addr :: ElmApp AddrU AddrU Html
-addr = fromView $ \addr -> Html $ H.div_ [] [
+addrApp :: ElmApp AddrU AddrU Html
+addrApp = fromView $ \addr -> Html $ H.div_ [] [
   H.label_ [] [ H.text "Addr: " ],
   H.input_ [ H.value_ addr, H.onInput Replace ] ]
 
-form :: ElmApp (ProdU NameU AddrU) (ProdU NameU AddrU) Html
-form = vmap f $ product name addr
+formApp :: ElmApp (ProdU NameU AddrU) (ProdU NameU AddrU) Html
+formApp = vmap f $ product nameApp addrApp
   where 
     f :: View (ProdV Html Html) m -> View Html m
     f (ProdV (Html vname) (Html vaddr)) = Html $ H.div_ [] [ vname, vaddr ]
@@ -135,18 +135,24 @@ instance UpdateStructure ParentU where
   act _ (Parent True) (Sum msg) = Parent (even msg)
   act _ (Parent False) (Sum msg) = Parent (odd msg)
 
-child :: ElmApp ChildU ChildU (Attr :~> Html)
-child = fromView $ \(Child model) -> Holed $ \f (Attr attr) -> Html $ H.div_ [] [
+childApp :: ElmApp ChildU ChildU (Attr :~> Html)
+childApp = fromView $ \(Child model) -> Holed $ \f (Attr attr) -> Html $ H.div_ [] [
   H.button_ [ H.onClick $ f $ Sum 1 ] [ H.text "To Child " ],
   H.label_ [] [ H.text $ pack ("Child: " ++ show model) ],
   H.button_ [ attr ] [ H.text "To Parent" ] ]
 
-parent :: ElmApp ParentU ParentU (ProdV Attr (Html :~> Html))
-parent = fromView $ \(Parent model) -> ProdV (Attr $ onClick $ Sum 1) (Holed $ \f (Html child) -> Html $ 
+parentApp :: ElmApp ParentU ParentU (ProdV Attr (Html :~> Html))
+parentApp = fromView $ \(Parent model) -> ProdV (Attr $ onClick $ Sum 1) (Holed $ \f (Html child) -> Html $ 
   H.div_ [ H.style_ $ singleton "background" $ if model then "red" else "blue" ] [ child ] )
 
-decorated :: ElmApp (ProdU ChildU ParentU) (ProdU ChildU ParentU) Html
-decorated = vmap f $ product child parent
+themeApp:: ElmApp (ProdU ChildU ParentU) (ProdU ChildU ParentU) Html
+themeApp = vmap f $ product childApp parentApp 
   where
     f :: View (ProdV (Attr :~> Html) (ProdV Attr (Html :~> Html))) m -> View Html m
     f (ProdV childTemplate (ProdV onClick parentTemplate)) = parentTemplate <~| (childTemplate <~| onClick)
+
+clickToUpdateChild :: View Attr ()
+clickToUpdateChild = Attr $ H.onClick ()
+
+template :: View (Html :~> Html) ()
+template = Holed $ \f (Html child) -> Html $ H.div_ [] [ child ]
