@@ -154,5 +154,5 @@ themeApp = vmap f $ product childApp parentApp
 clickToUpdateChild :: View Attr ()
 clickToUpdateChild = Attr $ H.onClick ()
 
-template :: View (Html :~> Html) ()
-template = Holed $ \f (Html child) -> Html $ H.div_ [] [ child ]
+-- template :: View (Html :~> Html) ()
+-- template = Holed $ \f (Html child) -> Html $ H.div_ [] [ child ]
