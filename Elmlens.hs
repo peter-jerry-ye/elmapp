@@ -189,11 +189,14 @@ fromView = ElmApp id
 lmap :: ULens u u' -> ElmApp u' uv v -> ElmApp u uv v
 lmap ul (ElmApp l h) = ElmApp (l . ul) h
 
-vmap :: (View v (Msg uv) -> View v' (Msg uv)) -> ElmApp u uv v -> ElmApp u uv v'
+vmap :: (forall m. View v m -> View v' m) -> ElmApp u uv v -> ElmApp u uv v'
 vmap f (ElmApp l h) = ElmApp l (f . h)
 
 vmap' :: ((Model uv -> View v (Msg uv)) -> (Model uv -> View v' (Msg uv))) -> ElmApp u uv v -> ElmApp u uv v'
 vmap' f (ElmApp l h) = ElmApp l (f h)
+
+split :: (UpdateStructure u, UpdateStructure uv1, UpdateStructure uv2) => ULens u u1 -> ElmApp u1 uv1 v1 -> ULens u u2 -> ElmApp u2 uv2 v2 -> ElmApp u (DupU uv1 uv2) (ProdV v1 v2)
+split l1 e1 l2 e2 = dup (lmap l1 e1) (lmap l2 e2)
 
 dup :: forall u uv uv' v v'. (UpdateStructure u, UpdateStructure uv, UpdateStructure uv') => ElmApp u uv v -> ElmApp u uv' v' -> ElmApp u (DupU uv uv') (ProdV v v')
 dup (ElmApp l1 view1) (ElmApp l2 view2) = 

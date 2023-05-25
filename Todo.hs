@@ -50,7 +50,7 @@ taskInput = fromView viewTask
 taskRow :: ElmApp (ProdU BoolU TaskInputU) (ProdU BoolU TaskInputU) (Html :~> Html)
 taskRow = vmap f (product checkButton taskInput)
   where
-    f :: View (ProdV Html Html) (Msg (ProdU BoolU TaskInputU)) -> View (Html :~> Html) (Msg (ProdU BoolU TaskInputU))
+    f :: View (ProdV Html Html) m -> View (Html :~> Html) m
     f (ProdV (Html h1) (Html h2)) = Holed $ \f (Html h) -> Html $ H.div_ [] [ fmap f h1, fmap f h2, h ]
 
 deleteButtons = fromView view
