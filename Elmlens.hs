@@ -27,12 +27,16 @@ module Elmlens where
 import           Control.Category (Category (..))
 import           Data.Kind        (Type)
 import           Data.Proxy       (Proxy (..))
-import           Data.IntMap.Strict (IntMap, fromList, foldlWithKey, toList)
+import           Data.IntMap.Strict (IntMap, (!))
 import           Prelude          hiding (id, (.), product)
 
 import           Miso             hiding (View)
 import qualified Miso.Html        as H
 import           Miso.String      (MisoString)
+import Control.Applicative (liftA2)
+import Data.Bifunctor (first, bimap)
+import qualified Data.IntMap as IntMap
+import Debug.Trace (trace)
 
 class (Eq m, Monoid m) => ElmlensMsg m where
   checkMempty :: m -> Bool
@@ -44,7 +48,7 @@ class (ElmlensMsg (Msg u), Eq (Model u)) => UpdateStructure (u :: Type) where
   type Msg u :: Type
   -- NB: data Proxy (u :: k) = Proxy
   -- is used to determine type u
-  act :: Proxy u -> Model u -> Msg u -> Model u
+  act :: Proxy u -> Model u -> Msg u -> Effect (Msg u) (Model u)
 
 instance (ElmlensMsg m1, ElmlensMsg m2) => ElmlensMsg (m1, m2) where
   checkMempty (m1, m2) = checkMempty m1 && checkMempty m2
@@ -56,7 +60,7 @@ instance (UpdateStructure u1, UpdateStructure u2) => UpdateStructure (ProdU u1 u
   type Model (ProdU u1 u2) = (Model u1, Model u2)
   type Msg (ProdU u1 u2) = (Msg u1, Msg u2)
 
-  act _ (m1, m2) (msg1, msg2) = (act (Proxy @u1) m1 msg1, act (Proxy @u2) m2 msg2)
+  act _ (m1, m2) (msg1, msg2) = liftA2 (,) (first (embFst (Proxy @u1) (Proxy @u2)) $ act (Proxy @u1) m1 msg1) (first (embSnd (Proxy @u1) (Proxy @u2)) $ act (Proxy @u2) m2 msg2)
 
 embFst :: (UpdateStructure u2) => Proxy u1 -> Proxy u2 -> Msg u1 ->  Msg (ProdU u1 u2)
 embFst _ _ m = (m, mempty)
@@ -99,9 +103,9 @@ instance (UpdateStructure u1, UpdateStructure u2) => UpdateStructure (DupU u1 u2
   type Model (DupU u1 u2) = Dup (Model u1) (Model u2)
   type Msg (DupU u1 u2) = DupMsg (Msg u1) (Msg u2)
 
-  act _ (Dup m1 m2) MNone = Dup m1 m2
-  act _ (Dup m1 m2) (MLeft ma) = Dup (act (Proxy @u1) m1 ma) m2
-  act _ (Dup m1 m2) (MRight mb) = Dup m1 (act (Proxy @u2) m2 mb)
+  act _ (Dup m1 m2) MNone = noEff $ Dup m1 m2
+  act _ (Dup m1 m2) (MLeft ma) = bimap MLeft (`Dup` m2) (act (Proxy @u1) m1 ma)
+  act _ (Dup m1 m2) (MRight mb) = bimap MRight (Dup m1) (act (Proxy @u2) m2 mb)
   act _ _ MConflict = error "Inconsistent message"
 
 data ULens u1 u2 =
@@ -221,39 +225,65 @@ instance (Eq model, ElmlensMsg msg) => ElmlensMsg [ AtomicListMsg model msg ] wh
   checkMempty _  = False
   checkFail _  = False
 
+data IList m = IList Int (IntMap Int) (IntMap m) deriving (Eq, Show)
+
+instance Functor IList where
+  fmap f (IList n indexMap mMap) = IList n indexMap (f <$> mMap)
+
+iFromList :: [ m ] -> IList m
+iFromList ls = IList (length ls) (IntMap.fromAscList $ zip [0..(length ls-1)] [0..(length ls-1)]) (IntMap.fromAscList $ zip [0..] ls)
+
+iToList :: IList m -> [ m ]
+iToList (IList _ indexMap mMap) = (\i -> mMap ! (indexMap ! i)) <$> [0 .. (IntMap.size indexMap - 1)]
+
+iLength :: IList m -> Int
+iLength (IList _ indexMap _) = IntMap.size indexMap
+
+actAtomicListMsg :: UpdateStructure u => Proxy u -> IList (Model u) -> AtomicListMsg (Model u) (Msg u) -> Effect [ AtomicListMsg (Model u) (Msg u) ] (IList (Model u))
+actAtomicListMsg pu (IList n indexMap mMap) (ALRep key msg) = case IntMap.lookup key mMap of
+  Just m -> bimap (\msg' -> [ ALRep key msg']) (\m' -> IList n indexMap (IntMap.insert key m' mMap)) (act pu m msg)
+  Nothing -> noEff (IList n indexMap mMap)
+actAtomicListMsg _ (IList n indexMap mMap) (ALDel i) = case IntMap.lookup i indexMap of
+  Just j -> let updatedMap = IntMap.mapKeys (\k -> if k >= i then k - 1 else k) (IntMap.delete i indexMap) in noEff (IList n updatedMap (IntMap.delete j mMap))
+  Nothing -> noEff (IList n indexMap mMap)
+actAtomicListMsg _ (IList n indexMap mMap) (ALIns i a) = 
+  let updatedMap = IntMap.mapKeys (\k -> if k >= i then k + 1 else k) indexMap in 
+    noEff (IList (n + 1) (IntMap.insert i n updatedMap) (IntMap.insert n a mMap))
+actAtomicListMsg _ (IList n indexMap mMap) (ALReorder f) = noEff (IList n (IntMap.mapKeys (f !) indexMap) mMap)
+
 -- For simplicity, we treat out-of-bound updates as identity updates
-actAtomicListMsg :: UpdateStructure u => Proxy u -> [ Model u ] -> AtomicListMsg (Model u) (Msg u) -> [ Model u ]
-actAtomicListMsg pu xs0 (ALRep i msg) = case splitAt i xs0 of
-        (xs, [])   -> xs
-        (xs, y:ys) -> xs ++ act pu y msg : ys
-actAtomicListMsg _ xs0 (ALDel i) = case splitAt i xs0 of
-        (xs, [])   -> xs
-        (xs, _:ys) -> xs ++ ys
-actAtomicListMsg _ xs0 (ALIns i a) = case splitAt i xs0 of
-        (xs, ys) -> xs ++ a : ys
-actAtomicListMsg _ xs0 (ALReorder f) = foldlWithKey (\ls key n -> case splitAt key ls of
-        (xs, []) -> xs
-        (xs, _:ys) -> xs ++ (xs0 !! n) : ys) xs0 f
+-- actAtomicListMsg :: UpdateStructure u => Proxy u -> [ Model u ] -> AtomicListMsg (Model u) (Msg u) -> [ Model u ]
+-- actAtomicListMsg pu xs0 (ALRep i msg) = case splitAt i xs0 of
+--         (xs, [])   -> xs
+--         (xs, y:ys) -> xs ++ act pu y msg : ys
+-- actAtomicListMsg _ xs0 (ALDel i) = case splitAt i xs0 of
+--         (xs, [])   -> xs
+--         (xs, _:ys) -> xs ++ ys
+-- actAtomicListMsg _ xs0 (ALIns i a) = case splitAt i xs0 of
+--         (xs, ys) -> xs ++ a : ys
+-- actAtomicListMsg _ xs0 (ALReorder f) = foldlWithKey (\ls key n -> case splitAt key ls of
+--         (xs, []) -> xs
+--         (xs, _:ys) -> xs ++ (xs0 !! n) : ys) xs0 f
 
 instance UpdateStructure u => UpdateStructure (ListU u) where
-  type Model (ListU u) = [ Model u ]
+  type Model (ListU u) = IList (Model u)
   type Msg (ListU u) = [ AtomicListMsg (Model u) (Msg u) ]
 
-  act _ = foldl (actAtomicListMsg (Proxy @u))
+  act _ ilist= foldl (\eff msgs -> eff >>= (\l -> actAtomicListMsg (Proxy @u) l msgs)) (noEff ilist)
 
 mapL :: forall u1 u2. UpdateStructure u1 => ULens u1 u2 -> ULens (ListU u1) (ListU u2)
-mapL l = ULens { get = map (get l), trans = tr, create = map (create l) }
+mapL l = ULens { get = \(IList n indexMap mMap) -> IList n indexMap (IntMap.map (get l) mMap), trans = tr, create = \(IList n indexMap mMap) -> IList n indexMap (IntMap.map (create l) mMap) }
   where
     tr :: Model (ListU u1) -> Msg (ListU u2) -> Msg (ListU u1)
     tr _ []         = mempty
     tr s (db : dbs) = let da = trA s db
-                      in da <> tr (act (Proxy @(ListU u1)) s da) dbs
+                      in da <> tr ((\(Effect m _) -> m) $ act (Proxy @(ListU u1)) s da) dbs
     trA :: Model (ListU u1) -> AtomicListMsg (Model u2) (Msg u2) -> Msg (ListU u1)
     trA _ (ALIns i a)   = [ALIns i (create l a)]
     trA _ (ALDel i)     = [ALDel i]
-    trA xs (ALRep i da) = case splitAt i xs of
-      (_xs1 , [] )      -> mempty
-      (_xs1, xi : _xs2) -> [ALRep i (trans l xi da)]
+    trA (IList _ _ mMap) (ALRep i da) = case IntMap.lookup i mMap of
+      Nothing -> mempty
+      Just m -> [ALRep i (trans l m da)]
     trA _ (ALReorder f) = [ALReorder f]
 
 list :: forall u uv v. UpdateStructure u => ElmApp u uv v -> ElmApp (ListU u) (ListU uv) (ListV v)
@@ -261,25 +291,7 @@ list (ElmApp lens h) =
   ElmApp (mapL lens) viewList
   where
     viewList :: Model (ListU uv) -> View (ListV v) (Msg (ListU uv))
-    viewList xs = ListV $ zipWith (\x i -> fmap (\msg -> [ALRep i msg]) $ h x) xs [0..]
-
-filterList :: forall u uv v. (UpdateStructure u) => (Model uv -> Bool) -> ElmApp u (ListU uv) v -> ElmApp u (ListU uv) v
-filterList predicate  = vmap' viewFilteredList
-  where
-    viewFilteredList ::  (Model (ListU uv) -> View v (Msg (ListU uv))) -> Model (ListU uv) -> View v (Msg (ListU uv))
-    viewFilteredList h ls = fmap (f (length ls) (fmap snd $ filter (\(x, _) -> predicate x) $ zip ls [0..])) (h $ filter predicate ls)
-    f :: Int -> [ Int ] -> Msg (ListU uv) -> Msg (ListU uv)
-    f _n _ls [] = []
-    f n ls (ALIns i a : dbs) = case splitAt i ls of 
-      (_xs1, []) -> ALIns n a : f (n + 1) (ls ++ [ n ]) dbs
-      (xs1, xi : xs2) -> ALIns (xi + 1) a : f (n + 1) (xs1 ++ xi : (xi + 1) : fmap (+1) xs2) dbs
-    f n ls (ALDel i : dbs) = case splitAt i ls of
-      (_xs1, []) -> f n ls dbs
-      (xs1, xi : xs2) -> ALDel xi : f (n - 1) (xs1 ++ fmap (\x -> x - 1) xs2) dbs
-    f n ls (ALRep i da : dbs) = case splitAt i ls of
-      (_xs1, []) -> f n ls dbs
-      (_xs1, xi : _xs2) -> ALRep xi da : f n ls dbs
-    f n ls (ALReorder reorder : dbs) = ALReorder (fromList $ fmap (\(from, to) -> (ls !! from, ls !! to)) $ toList reorder) : f n ls dbs
+    viewList (IList _ indexMap mMap) = ListV $ map (\i -> fmap (\msg -> [ ALRep (indexMap ! i) msg ] ) $ h (mMap ! (indexMap ! i))) [0..(IntMap.size indexMap - 1)]
 
 filterE :: forall u uv v. (UpdateStructure u, UpdateStructure uv) => (Model u -> Bool) -> ElmApp (ListU u) uv (ListV v) -> ElmApp (ListU u) (DupU (ListU u) uv) (ListV v)
 filterE predicate e = vmap f $ dup eFilter e
@@ -287,7 +299,7 @@ filterE predicate e = vmap f $ dup eFilter e
     f :: View (ProdV (ListV v :~> ListV v) (ListV v)) msg -> View (ListV v) msg
     f (ProdV (Holed template) v) = template id v
     eFilter :: ElmApp (ListU u) (ListU u) (ListV v :~> ListV v)
-    eFilter = fromView $ \ls -> Holed (\_ (ListV vs) -> ListV $ fmap fst $ filter (predicate . snd) $ zip vs ls)
+    eFilter = fromView $ \(IList _ indexMap mMap) -> Holed (\_ (ListV vs) -> ListV $ fmap fst $ filter (predicate . snd) $ zip vs (map (\i -> mMap ! (indexMap ! i)) [0..(IntMap.size indexMap - 1)]))
     
 
 conditional :: forall u uv1 uv2 v. (UpdateStructure u, UpdateStructure uv1, UpdateStructure uv2) => (Model u -> Bool)
@@ -300,7 +312,7 @@ conditional predicate e1 e2 = vmap f $ dup eConditional $ dup e1 e2
     eConditional = fromView $ \s -> Holed (\_ v1 -> 
                                     Holed (\f' v2 -> if predicate s then fmap f' v1 else v2))
     
-render :: forall u uv. UpdateStructure u => ElmApp u uv Html -> Model u -> Maybe MisoString -> App (Model u) (Msg u)
+render :: forall u uv. (UpdateStructure u, Show (Model u)) => ElmApp u uv Html -> Model u -> Maybe MisoString -> App (Model u) (Msg u)
 render (ElmApp l v) model mountPoint = App {
   subs   = []
 , events = defaultEvents
@@ -310,6 +322,6 @@ render (ElmApp l v) model mountPoint = App {
 }
   where
     update :: Msg u -> Model u -> Effect (Msg u) (Model u)
-    update = \m s -> noEff $ act (Proxy @u) s m
+    update msg m = trace (show m) (act (Proxy @u) m msg)
     view :: Model u -> H.View (Msg u)
     view = \s -> (\(Html h) -> h) (fmap (trans l s) $ v (get l s))

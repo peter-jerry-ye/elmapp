@@ -10,9 +10,10 @@ import Apps
 import Todo
 
 main :: IO ()
-main = startApp $ 
+main = do
+  t <- now
+  startApp $ timeApp t Nothing
   -- todo_app_without_filter 
   -- highlight_demo_app
-   -- todomvcapp $ Nothing
-  themedApp $ Nothing
-
+   -- todomvcapp Nothing
+  -- themedApp Nothing

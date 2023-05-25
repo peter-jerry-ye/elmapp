@@ -107,7 +107,7 @@ instance UpdateStructure LabelU where
   type Model LabelU = MisoString
   type Msg LabelU = MisoString
 
-  act _ n m = n <> m
+  act _ n m = noEff $ n <> m
 
 buttonsConfig :: [(MisoString, MisoString, ULens (ProdU (RepU Int) (ProdU (RepU StdGen) (ListU (ProdU (RepU Int) LabelU)))) (UnitU (Sum Natural)))]
 buttonsConfig = [
@@ -117,35 +117,35 @@ buttonsConfig = [
                 foldl (\(cumul, index, gen, l) _ -> 
                         let (newRows, newGen) = generateRows n index ([], gen) 
                         in (cumul <> (Replace $ index + n, (Replace newGen, Prelude.replicate l (ALDel 0) ++ zipWith ALIns [0..] newRows)), index + n, newGen, length newRows)) 
-                      (mempty, index, gen, length ls) [0 .. m - 1],
-            create = const (0, (mkStdGen 0, []))}),
+                      (mempty, index, gen, iLength ls) [0 .. m - 1],
+            create = const (0, (mkStdGen 0, iFromList []))}),
   ("runlots", "Create 10,000 rows",
     ULens { get = const (),
             trans = \(index, (gen, ls)) (Sum m) -> if m == 0 then mempty else let n = 10 in (\(msgs, _, _, _) -> msgs) $ 
                 foldl (\(cumul, index, gen, l) _ -> 
                         let (newRows, newGen) = generateRows n index ([], gen) 
                         in (cumul <> (Replace $ index + n, (Replace newGen, Prelude.replicate l (ALDel 0) ++ zipWith ALIns [0..] newRows)), index + n, newGen, length newRows)) 
-                      (mempty, index, gen, length ls) [0 .. m - 1],
-            create = const (0, (mkStdGen 0, []))}),
+                      (mempty, index, gen, iLength ls) [0 .. m - 1],
+            create = const (0, (mkStdGen 0, iFromList []))}),
   ("add", "Append 1,000 rows",
     ULens { get = const (),
             trans = \(index, (gen, ls)) (Sum m) -> 
               let n = 1000 * fromIntegral m
                   (newRows, newGen) = generateRows n index ([], gen) in
-              if n == 0 then mempty else (Replace $ index + n, (Replace newGen, zipWith ALIns [(length ls)..] newRows)),
-            create = const (0, (mkStdGen 0, []))}),
+              if n == 0 then mempty else (Replace $ index + n, (Replace newGen, zipWith ALIns [(iLength ls)..] newRows)),
+            create = const (0, (mkStdGen 0, iFromList []))}),
   ("update", "Update every 10th row", 
     ULens { get = const (), 
-            trans = \(_, (_, ls)) (Sum m) -> if m == 0 then mempty else (mempty, (mempty, [ ALRep i (mempty, Miso.String.replicate (fromIntegral m) $ pack " !!!") | i <- [0 .. (length ls)], i `mod` 10 == 0])),
-            create = const (0, (mkStdGen 0, []))}),
+            trans = \(_, (_, ls)) (Sum m) -> if m == 0 then mempty else (mempty, (mempty, [ ALRep i (mempty, Miso.String.replicate (fromIntegral m) $ pack " !!!") | i <- [0 .. (iLength ls)], i `mod` 10 == 0])),
+            create = const (0, (mkStdGen 0, iFromList []))}),
   ("clear", "Clear", 
     ULens { get = const (),
-            trans = \(_, (_, ls)) m -> if m == 0 then mempty else (mempty, (mempty, Prelude.replicate (length ls) (ALDel 0))),
-            create = const (0, (mkStdGen 0, []))}),
+            trans = \(_, (_, ls)) m -> if m == 0 then mempty else (mempty, (mempty, Prelude.replicate (iLength ls) (ALDel 0))),
+            create = const (0, (mkStdGen 0, iFromList []))}),
   ("swaprows", "Swap Rows", 
     ULens { get = const (),
             trans = \(_, (_, ls)) (Sum m) -> if m == 0 then mempty else (mempty, (mempty, Prelude.replicate (fromIntegral m) $ ALReorder $ fromList [(1, 998), (998, 1)])),
-            create = const (0, (mkStdGen 0, []))})]
+            create = const (0, (mkStdGen 0, iFromList []))})]
 
 -- TODO When a button is clicked multiple times, will the message be truncated into one?
 
@@ -194,13 +194,13 @@ jumbotronTemplate = fromView $ \_ ->  Holed (\_f (ListV buttons) ->
                             H.div_ [ H.class_ "col-md-6"] (fmap (\(Html b) -> b) buttons) ]]))
 
 jumbotron = vmap (\(ProdV (Holed template) (ProdV h1 (ProdV h2 (ProdV h3 (ProdV h4 (ProdV h5 h6)))))) -> template id $ ListV [h1, h2, h3, h4, h5, h6] ) 
-  $ dup (lmap (unitL (0, (mkStdGen 0, []))) jumbotronTemplate) buttons
+  $ dup (lmap (unitL (0, (mkStdGen 0, iFromList []))) jumbotronTemplate) buttons
 
 deletes :: UpdateStructure u => ElmApp (ListU u) (ListU u) (ListV Html)
 deletes = fromView $ \ls -> ListV $ fmap (\i -> Html $ 
     H.a_ [ H.onClick [ALDel i]] 
          [ H.span_ [ H.class_ "glyphicon glyphicon-remove", H.boolProp "aria-hidden" True ] [] ] ) 
-    [0 .. (length ls)]
+    [0 .. (iLength ls)]
 
 highlights :: ElmApp (ProdU (RepU Int) (ListU (ProdU (RepU Int) LabelU)))
                      (ProdU (RepU Int) (ListU (ProdU (RepU Int) LabelU)))
@@ -208,7 +208,7 @@ highlights :: ElmApp (ProdU (RepU Int) (ListU (ProdU (RepU Int) LabelU)))
 highlights = fromView $ \(selected, ls) -> ListV $ fmap (\(id, label) -> 
     ProdV ( Attr $ H.classList_ [ ("danger", selected == id) ])
          ( Html $ H.a_ [H.onClick (Replace id, mempty)] [ text label ]) )
-    ls
+    (iToList ls)
 
 rowTemplate :: ElmApp (UnitU (Sum Natural)) (UnitU (Sum Natural)) (Attr :~> Html :~> Html :~> Html :~> Html)
 rowTemplate = fromView $ \_ -> 
@@ -225,7 +225,7 @@ rowTemplate = fromView $ \_ ->
 tableTemplate = list rowTemplate
 
 rows :: ElmApp (ListU (ProdU (RepU Int) LabelU)) (ListU (ProdU (RepU Int) LabelU)) (ListV (ProdV Html Html))
-rows = fromView $ \ls -> ListV $ fmap (\(index, label) -> ProdV (Html $ H.text $ pack $ show index) (Html $ H.text label)) ls
+rows = fromView $ \ls -> ListV $ fmap (\(index, label) -> ProdV (Html $ H.text $ pack $ show index) (Html $ H.text label)) (iToList ls)
 
 table = vmap mapView $ dup highlights (lmap (proj2L 0) (dup (dup rows deletes) (lmap (mapL (unitL (0, ""))) tableTemplate)))
   where
@@ -244,9 +244,9 @@ template = fromView $ \_ -> Holed (\_f (Html jumbotron) -> Holed (\f1 (ListV row
                       H.span_ [ H.class_ "preloadicon glyphicon glyphicon-remove",
                                 H.boolProp "aria-hidden" True ] [] ]]))
 
-benchmark = vmap f $ dup (dup (lmap (productL id (productL id (proj2L 0))) jumbotron) (lmap (proj2L (mkStdGen 0) . proj2L 0) table)) (lmap (unitL (0, (mkStdGen 0, (0, [])))) template)
+benchmark = vmap f $ dup (dup (lmap (productL id (productL id (proj2L 0))) jumbotron) (lmap (proj2L (mkStdGen 0) . proj2L 0) table)) (lmap (unitL (0, (mkStdGen 0, (0, iFromList [])))) template)
   where
     f :: View (ProdV (ProdV Html (ListV Html)) (Html :~> ListV Html :~> Html)) m -> View Html m
     f (ProdV (ProdV jumbo rows) template) = template <~| jumbo <~| rows
 
-benchmarkApp seed = render benchmark (0, (seed, (-1, [])))
+benchmarkApp seed = render benchmark (0, (seed, (-1, iFromList [])))

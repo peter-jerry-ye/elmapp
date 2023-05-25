@@ -21,6 +21,7 @@ module ElmlensProp where
 import           Data.Proxy       (Proxy (..))
 import           Data.Kind        (Type)
 import           Elmlens
+import Miso
 
 class (Semigroup (Mask u), UpdateStructure u) => MaskedUpdateStructure (u :: Type) where
   type Mask u :: Type
@@ -54,22 +55,22 @@ instance (MaskedUpdateStructure u) => MaskedUpdateStructure (ListU u) where
       f (ALReorder _) = Nothing
       f (ALRep _ m) = Just (mask (Proxy @u) m)
       
-  eqv _ (Just m) ms ms' = and (zipWith (eqv (Proxy @u) m) ms ms')
+  eqv _ (Just m) ms ms' = and (zipWith (eqv (Proxy @u) m) (iToList ms) (iToList ms'))
   eqv _ Nothing ms ms' = ms == ms'
 
 translateEmptyProp :: (UpdateStructure u1, UpdateStructure u2) => ULens u1 u2 -> Model u1 -> Bool
-translateEmptyProp lens model = checkMempty $ trans lens model mempty
+translateEmptyProp lens m= checkMempty $ trans lens m mempty
 
 translateCombineProp :: forall u1 u2. (UpdateStructure u1, UpdateStructure u2) => ULens u1 u2 -> Model u1 -> Msg u2 -> Msg u2 -> Bool
 translateCombineProp lens m1 msg2 msg2' = 
   checkFail (msg1 <> msg1') || checkFail (msg2 <> msg2') || (msg1 <> msg1') == trans lens m1 (msg2 <> msg2')
     where
       msg1 = trans lens m1 msg2
-      msg1' = trans lens (act (Proxy @u1) m1 msg1) msg2'
+      msg1' = trans lens ((\(Effect m _) -> m) $ act (Proxy @u1) m1 msg1) msg2'
 
 consistencyProp :: forall u1 u2. (MaskedUpdateStructure u1, MaskedUpdateStructure u2) => ULens u1 u2 -> Model u1 -> Msg u2 -> Bool
 consistencyProp lens m1 msg2 =
-  eqv (Proxy @u2) m (get lens (act (Proxy @u1) m1 msg1)) (act (Proxy @u2) m2 msg2)
+  eqv (Proxy @u2) m (get lens ((\(Effect m' _) -> m') $ act (Proxy @u1) m1 msg1)) ((\(Effect m' _) -> m') $ act (Proxy @u2) m2 msg2)
   where
     msg1 = trans lens m1 msg2
     m2 = get lens m1

@@ -33,7 +33,7 @@ instance UpdateStructure TaskInputU where
   type Model TaskInputU = (MisoString, Maybe MisoString)
   type Msg TaskInputU = [ EditMsg ]
 
-  act _ model [] = model
+  act _ model [] = noEff model
   act pu (str, Nothing) (Focus : xs) = act pu (str, Just str) xs
   act pu (str, Just edit) (Cancel : xs) = act pu (str, Nothing) xs
   act pu (str, Just edit) (Commit : xs) = act pu (edit, Nothing) xs
@@ -60,7 +60,7 @@ taskRow = vmap f (product checkButton taskInput)
 deleteButtons = fromView view
   where
     view :: Model (ListU (ProdU BoolU TaskInputU)) -> View (ListV Html) (Msg (ListU (ProdU BoolU TaskInputU)))
-    view list = ListV $ Data.List.zipWith (\index _ -> Html $ H.button_ [ H.class_ "btn", H.class_ "btn-danger", H.onClick [ ALDel index ] ] [ H.text "Delete" ]) [0..] list
+    view list = ListV $ Data.List.zipWith (\index _ -> Html $ H.button_ [ H.class_ "btn", H.class_ "btn-danger", H.onClick [ ALDel index ] ] [ H.text "Delete" ]) [0..] (iToList list)
 
 tasks = vmap f $ dup (list taskRow) deleteButtons
   where
@@ -77,14 +77,14 @@ newTask = fromView (\(str, ls) ->
       H.class_ "row",
       H.value_ str, 
       H.onInput $ \s -> (Replace s, [] ), 
-      H.onChange $ const (Replace "", [ ALIns (Prelude.length ls) (False, (str, Nothing)) ] ) ] )
+      H.onChange $ const (Replace "", [ ALIns (iLength ls) (False, (str, Nothing)) ] ) ] )
 
 todoWithoutFilter = vmap f $ dup newTask (lmap (proj2L "") tasks)
   where
     f :: View (ProdV Html (ListV Html)) m -> View Html m
     f (ProdV v1 (ListV v2)) = Html $ H.div_ [] $ fmap (\(Html h) -> h) (v1 : v2)
 
-todoWithoutFilterApp = render todoWithoutFilter ("", [])
+todoWithoutFilterApp = render todoWithoutFilter ("", iFromList [])
 
 data TaskFilter = 
     DisplayAll
@@ -118,7 +118,7 @@ todomvc = vmap f $ dup (lmap (productL id (proj2L DisplayAll)) newTask) (lmap (p
     f (ProdV (Html inputV) (ProdV (Html filterV) (ListV tasksV))) = 
         Html $ H.div_ [] $ [ inputV, filterV ] ++ fmap (\(Html v) -> v) tasksV
 
-todomvcapp = render todomvc ("", (DisplayAll, []))
+todomvcapp = render todomvc ("", (DisplayAll, iFromList []))
 
 theme :: ElmApp BoolU BoolU (Html :~> Html)
 theme = fromView $ \isDark -> Holed $ \f (Html child) -> Html $ 
@@ -133,4 +133,4 @@ themed = vmap f $ product theme todoWithoutFilter
     f :: View (ProdV (Html :~> Html) Html) m -> View Html m
     f (ProdV template h) = template <~| h
 
-themedApp = render themed (False, ("", []))
+themedApp = render themed (False, ("", iFromList []))
