@@ -13,5 +13,6 @@ main :: IO ()
 main = startApp $ 
   -- todo_app_without_filter 
   -- highlight_demo_app
-   todomvcapp $ Nothing
+   -- todomvcapp $ Nothing
+  themedApp $ Nothing
 

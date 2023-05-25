@@ -51,12 +51,16 @@ taskRow :: ElmApp (ProdU BoolU TaskInputU) (ProdU BoolU TaskInputU) (Html :~> Ht
 taskRow = vmap f (product checkButton taskInput)
   where
     f :: View (ProdV Html Html) m -> View (Html :~> Html) m
-    f (ProdV (Html h1) (Html h2)) = Holed $ \f (Html h) -> Html $ H.div_ [] [ fmap f h1, fmap f h2, h ]
+    f (ProdV (Html h1) (Html h2)) = Holed $ \f (Html h) -> Html $ 
+      H.div_ [ H.class_ "row" ] [ 
+        H.div_ [ H.class_ "col-1"] [ fmap f h1 ], 
+        H.div_ [ H.class_ "col-2"] [ fmap f h2 ], 
+        H.div_ [ H.class_ "col"] [ h ] ]
 
 deleteButtons = fromView view
   where
     view :: Model (ListU (ProdU BoolU TaskInputU)) -> View (ListV Html) (Msg (ListU (ProdU BoolU TaskInputU)))
-    view list = ListV $ Data.List.zipWith (\index _ -> Html $ H.button_ [ H.onClick [ ALDel index ] ] [ H.text "Delete" ]) [0..] list
+    view list = ListV $ Data.List.zipWith (\index _ -> Html $ H.button_ [ H.class_ "btn", H.class_ "btn-danger", H.onClick [ ALDel index ] ] [ H.text "Delete" ]) [0..] list
 
 tasks = vmap f $ dup (list taskRow) deleteButtons
   where
@@ -70,6 +74,7 @@ finishedTasks = filterE fst tasks
 newTask :: ElmApp (ProdU StringU (ListU (ProdU BoolU TaskInputU))) (ProdU StringU (ListU (ProdU BoolU TaskInputU))) Html
 newTask = fromView (\(str, ls) -> 
     Html $ H.input_ [ 
+      H.class_ "row",
       H.value_ str, 
       H.onInput $ \s -> (Replace s, [] ), 
       H.onChange $ const (Replace "", [ ALIns (Prelude.length ls) (False, (str, Nothing)) ] ) ] )
@@ -115,3 +120,17 @@ todomvc = vmap f $ dup (lmap (productL id (proj2L DisplayAll)) newTask) (lmap (p
 
 todomvcapp = render todomvc ("", (DisplayAll, []))
 
+theme :: ElmApp BoolU BoolU (Html :~> Html)
+theme = fromView $ \isDark -> Holed $ \f (Html child) -> Html $ 
+  H.div_ [ H.textProp "data-bs-theme" $ if isDark then "dark" else "light" ] [ 
+    H.div_ [ H.class_ "form-check", H.class_ "form-switch" ] [
+      H.input_ [ H.class_ "form-check-input", H.id_ "darkModeSwitch", H.type_ "checkbox", H.textProp "role" "switch", H.checked_ isDark, H.onInput $ \str -> f $ Replace $ not isDark ],
+      H.label_ [ H.class_ "form-check-label", H.for_ "darkModeSwitch" ] [ "Dark Mode" ] ],
+   child ]
+
+themed = vmap f $ product theme todoWithoutFilter
+  where
+    f :: View (ProdV (Html :~> Html) Html) m -> View Html m
+    f (ProdV template h) = template <~| h
+
+themedApp = render themed (False, ("", []))
