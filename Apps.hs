@@ -63,7 +63,7 @@ instance (Eq a) => UpdateStructure (RepU a) where
 type BoolU = RepU Bool
 
 checkButton :: ElmApp BoolU BoolU Html
-checkButton = fromView (\b -> Html $ H.input_ [ H.type_ "checkbox", H.checked_ b, H.onChecked (\(Checked x) -> Replace x) ]  )
+checkButton = fromView (\b -> Html $ H.input_ [ H.type_ "checkbox", H.class_ "uk-checkbox", H.checked_ b, H.onChecked (\(Checked x) -> Replace x) ]  )
 
 type StringU = RepU MisoString
 

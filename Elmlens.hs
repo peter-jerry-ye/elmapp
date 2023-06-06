@@ -189,7 +189,9 @@ fromView = ElmApp id
 lmap :: ULens u u' -> ElmApp u' uv v -> ElmApp u uv v
 lmap ul (ElmApp l h) = ElmApp (l . ul) h
 
-vmap :: (forall m. View v m -> View v' m) -> ElmApp u uv v -> ElmApp u uv v'
+type (~>) f g = forall x. f x -> g x
+
+vmap :: (View v ~> View v') -> ElmApp u uv v -> ElmApp u uv v'
 vmap f (ElmApp l h) = ElmApp l (f . h)
 
 vmap' :: ((Model uv -> View v (Msg uv)) -> (Model uv -> View v' (Msg uv))) -> ElmApp u uv v -> ElmApp u uv v'
