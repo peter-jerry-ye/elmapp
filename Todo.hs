@@ -1,21 +1,43 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DataKinds                  #-}
+{-# LANGUAGE DerivingStrategies         #-}
 {-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE RecordWildCards            #-}
+
+-- Following is not needed in GHC 2021
+{-# LANGUAGE ExistentialQuantification  #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE GADTSyntax                 #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE RankNTypes                 #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE TypeOperators              #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Use bimap" #-}
+{-# HLINT ignore "Use <$>" #-}
+{-# HLINT ignore "Unused LANGUAGE pragma" #-}
 
 module Todo where
 
 import Data.Kind        (Type)
+import Data.Proxy       (Proxy (..))
 import Control.Category (Category (..))
 import Miso hiding (View)
 import qualified Miso.Html as H
 import Miso.String hiding (filter)
 import Data.Semigroup   (Sum (..))
-import Data.List        (zipWith)
+import Data.List        (zipWith, foldl, filter, map, splitAt, length, zip)
 import Prelude hiding (id, product, (.))
 import Elmlens
 import Apps
 import qualified Data.Map as M
+import Data.Bifunctor (second)
+import Data.IntMap (fromList)
+import Data.IntMap.Strict (toList)
 
 data TaskInputU
 
@@ -153,4 +175,98 @@ todomvcapp = render todomvc ("", (DisplayAll, []))
 -- themedApp = render themed (False, ("", []))
 
 themedApp = render themedTodoMVC (False, ("", (DisplayAll, [])))
+
+class (UpdateStructure filterU, UpdateStructure dataU) => FilterOperation filterU dataU where
+  filter:: Proxy filterU -> Proxy dataU -> Model filterU -> Model dataU -> Bool
+
+instance FilterOperation TaskFilterU (ProdU BoolU TaskInputU) where
+  filter _ _ DisplayAll = const True
+  filter _ _ Doing = not . fst
+  filter _ _ Done = fst
+
+data FilterListU filterU u
+
+instance forall u filterU. (UpdateStructure u, UpdateStructure filterU, FilterOperation filterU u) => UpdateStructure (FilterListU filterU u) where
+  type Model (FilterListU filterU u) = (Model filterU, [ Model u ])
+  type Msg (FilterListU filterU u) = [ AtomicListMsg (Model u) (Msg u) ]
+
+  act _ model msgs = (fst model, Data.List.filter (Todo.filter (Proxy @filterU) (Proxy @u) (fst model)) $ Data.List.foldl (actAtomicListMsg (Proxy @u)) (snd model) msgs)
+
+filterL :: forall filterU u1 u2. UpdateStructure u1 => ULens u1 u2 -> ULens (FilterListU filterU u1) (FilterListU filterU u2)
+filterL l = ULens { get = second $ Data.List.map (get l), trans = tr . snd, create = second $ Data.List.map (create l) }
+  where
+    tr :: Model (ListU u1) -> Msg (ListU u2) -> Msg (ListU u1)
+    tr _ []         = mempty
+    tr s (db : dbs) = let da = trA s db
+                      in da <> tr (act (Proxy @(ListU u1)) s da) dbs
+    trA :: Model (ListU u1) -> AtomicListMsg (Model u2) (Msg u2) -> Msg (ListU u1)
+    trA _ (ALIns i a)   = [ALIns i (create l a)]
+    trA _ (ALDel i)     = [ALDel i]
+    trA xs (ALRep i da) = case Data.List.splitAt i xs of
+      (_xs1 , [] )      -> mempty
+      (_xs1, xi : _xs2) -> [ALRep i (trans l xi da)]
+    trA _ (ALReorder f) = [ALReorder f]
+
+filterApp :: forall filterU u uv v. (UpdateStructure filterU, UpdateStructure u) => ElmApp u uv v -> ElmApp (FilterListU filterU u) (FilterListU filterU uv) (ListV v)
+filterApp (ElmApp lens h) =
+  ElmApp (filterL lens) (viewList . snd)
+  where
+    viewList :: Model (ListU uv) -> View (ListV v) (Msg (ListU uv))
+    viewList xs = ListV $ Data.List.zipWith (\x i -> fmap (\msg -> [ALRep i msg]) $ h x) xs [0..]
+
+filterTaskL :: ULens (ProdU TaskFilterU (ListU (ProdU BoolU TaskInputU))) (FilterListU TaskFilterU (ProdU BoolU TaskInputU))
+filterTaskL = ULens { 
+  get = \(taskFilter, ls) -> case taskFilter of
+    DisplayAll -> (taskFilter, ls)
+    Doing -> (taskFilter, Data.List.filter fst ls)
+    Done -> (taskFilter, Data.List.filter (not . fst) ls),
+  trans = tr,
+  create = id }
+  where 
+    tr :: Model (ProdU TaskFilterU (ListU (ProdU BoolU TaskInputU))) -> Msg (FilterListU TaskFilterU (ProdU BoolU TaskInputU)) ->Msg (ProdU TaskFilterU (ListU (ProdU BoolU TaskInputU)))
+    tr (filter, _) [] = mempty
+    tr (filter, s) (db : dbs) = let da = trA filter s db
+                                in (mempty, da) <> tr (filter, act (Proxy @(ListU (ProdU BoolU TaskInputU))) s da) dbs
+
+    trA :: Model TaskFilterU -> Model (ListU (ProdU BoolU TaskInputU)) -> AtomicListMsg (Model (ProdU BoolU TaskInputU)) (Msg (ProdU BoolU TaskInputU)) -> Msg (ListU (ProdU BoolU TaskInputU))
+    trA DisplayAll _ msg = [msg]
+    trA Doing ls msg = f (Data.List.length ls) (fmap snd $ Data.List.filter (not . fst . fst) $ Data.List.zip ls [0..]) msg
+    trA Done ls msg = f (Data.List.length ls) (fmap snd $ Data.List.filter (fst . fst) $ Data.List.zip ls [0..]) msg
+    f n ls (ALIns i a) = case Data.List.splitAt i ls of 
+      (_xs1, []) -> [ALIns n a]
+      (xs1, xi : xs2) -> [ALIns (xi + 1) a]
+    f n ls (ALDel i) = case Data.List.splitAt i ls of
+      (_xs1, []) -> []
+      (xs1, xi : xs2) -> [ALDel xi]
+    f n ls (ALRep i da) = case Data.List.splitAt i ls of
+      (_xs1, []) -> []
+      (_xs1, xi : _xs2) -> [ALRep xi da]
+    f n ls (ALReorder reorder) = [ALReorder (fromList $ fmap (\(from, to) -> (ls !! from, ls !! to)) $ toList reorder)]
+
+unfinishedTasks' = vmap f $ dup (lmap filterTaskL $ filterApp taskRow) (lmap (proj2L DisplayAll) deleteButtons)
+  where
+    f :: View (ProdV (ListV (v :~> Html)) (ListV v)) ~> View (ListV Html)
+    f (ProdV (ListV v1) (ListV v2)) = ListV $ Data.List.zipWith (<~|) v1 v2
+
+filteredTasks' = 
+  conditional (\(filter, _) -> filter == DisplayAll)
+              (product taskFilterSwitch tasks)
+              $ conditional (\(filter, _) -> filter == Doing)
+                            (dup (lmap (proj1L []) taskFilterSwitch) unfinishedTasks')
+                            (product taskFilterSwitch finishedTasks)
+
+todomvc' = vmap f $ dup (lmap (productL id (proj2L DisplayAll)) newTask) (lmap (proj2L "") filteredTasks')
+  where
+    f :: View (ProdV Html (ProdV Html (ListV Html))) m -> View Html m
+    f (ProdV (Html inputV) (ProdV (Html filterV) (ListV tasksV))) = 
+        Html $ H.div_ [ H.class_ "uk-grid uk-width-1-2" ] $ [ inputV, filterV ] ++ fmap (\(Html v) -> v) tasksV
+
+themedTodoMVC' = vmap f $ product theme todomvc
+  where
+    f :: View (ProdV (ListV Html :~> Html) Html) ~> View Html
+    f (ProdV template todo) = template <~| ListV [ todo ]
+
+todomvcapp' = render todomvc ("", (DisplayAll, []))
+
+themedApp' = render themedTodoMVC (False, ("", (DisplayAll, [])))
 
