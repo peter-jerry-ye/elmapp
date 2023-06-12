@@ -65,11 +65,11 @@ translateCombineProp lens m1 msg2 msg2' =
   checkFail (msg1 <> msg1') || checkFail (msg2 <> msg2') || (msg1 <> msg1') == trans lens m1 (msg2 <> msg2')
     where
       msg1 = trans lens m1 msg2
-      msg1' = trans lens (act (Proxy @u1) m1 msg1) msg2'
+      msg1' = trans lens (upd (Proxy @u1) m1 msg1) msg2'
 
 consistencyProp :: forall u1 u2. (MaskedUpdateStructure u1, MaskedUpdateStructure u2) => ULens u1 u2 -> Model u1 -> Msg u2 -> Bool
 consistencyProp lens m1 msg2 =
-  eqv (Proxy @u2) m (get lens (act (Proxy @u1) m1 msg1)) (act (Proxy @u2) m2 msg2)
+  eqv (Proxy @u2) m (get lens (upd (Proxy @u1) m1 msg1)) (upd (Proxy @u2) m2 msg2)
   where
     msg1 = trans lens m1 msg2
     m2 = get lens m1

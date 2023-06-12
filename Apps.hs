@@ -26,7 +26,7 @@ instance UpdateStructure IntU where
   type Model IntU = Int
   type Msg IntU = Sum Int
 
-  act _ n (Sum m) = n + m
+  upd _ n (Sum m) = n + m
 
 counter :: ElmApp IntU IntU Html
 counter = fromView (\x -> Html $ H.div_ [] [
@@ -57,8 +57,8 @@ instance (Eq a) => UpdateStructure (RepU a) where
   type Model (RepU a) = a
   type Msg (RepU a) = ScratchMsg a
 
-  act _ a Keep        = a
-  act _ _ (Replace a) = a
+  upd _ a Keep        = a
+  upd _ _ (Replace a) = a
 
 type BoolU = RepU Bool
 
@@ -90,7 +90,7 @@ instance (ElmlensMsg a) => UpdateStructure (UnitU a) where
   type Model (UnitU a) = ()
   type Msg (UnitU a) = a
 
-  act _ _ _ = ()
+  upd _ _ _ = ()
 
 unitL :: (UpdateStructure u) => Model u -> ULens u (UnitU a)
 unitL m = ULens { get = const (), trans = const mempty, create = const m }
@@ -123,7 +123,7 @@ instance UpdateStructure ChildU where
   type Model ChildU = Child
   type Msg ChildU = Sum Int
 
-  act _ (Child model) (Sum msg) = Child (model + msg)
+  upd _ (Child model) (Sum msg) = Child (model + msg)
  
 data ParentU
 newtype Parent = Parent Bool deriving Eq
@@ -132,8 +132,8 @@ instance UpdateStructure ParentU where
   type Model ParentU = Parent
   type Msg ParentU = Sum Int
 
-  act _ (Parent True) (Sum msg) = Parent (even msg)
-  act _ (Parent False) (Sum msg) = Parent (odd msg)
+  upd _ (Parent True) (Sum msg) = Parent (even msg)
+  upd _ (Parent False) (Sum msg) = Parent (odd msg)
 
 childApp :: ElmApp ChildU ChildU (Attr :~> Html)
 childApp = fromView $ \(Child model) -> Holed $ \f (Attr attr) -> Html $ H.div_ [] [

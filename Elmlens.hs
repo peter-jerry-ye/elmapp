@@ -44,7 +44,7 @@ class (ElmlensMsg (Msg u), Eq (Model u)) => UpdateStructure (u :: Type) where
   type Msg u :: Type
   -- NB: data Proxy (u :: k) = Proxy
   -- is used to determine type u
-  act :: Proxy u -> Model u -> Msg u -> Model u
+  upd :: Proxy u -> Model u -> Msg u -> Model u
 
 instance (ElmlensMsg m1, ElmlensMsg m2) => ElmlensMsg (m1, m2) where
   checkMempty (m1, m2) = checkMempty m1 && checkMempty m2
@@ -56,7 +56,7 @@ instance (UpdateStructure u1, UpdateStructure u2) => UpdateStructure (ProdU u1 u
   type Model (ProdU u1 u2) = (Model u1, Model u2)
   type Msg (ProdU u1 u2) = (Msg u1, Msg u2)
 
-  act _ (m1, m2) (msg1, msg2) = (act (Proxy @u1) m1 msg1, act (Proxy @u2) m2 msg2)
+  upd _ (m1, m2) (msg1, msg2) = (upd (Proxy @u1) m1 msg1, upd (Proxy @u2) m2 msg2)
 
 embFst :: (UpdateStructure u2) => Proxy u1 -> Proxy u2 -> Msg u1 ->  Msg (ProdU u1 u2)
 embFst _ _ m = (m, mempty)
@@ -99,10 +99,10 @@ instance (UpdateStructure u1, UpdateStructure u2) => UpdateStructure (DupU u1 u2
   type Model (DupU u1 u2) = Dup (Model u1) (Model u2)
   type Msg (DupU u1 u2) = DupMsg (Msg u1) (Msg u2)
 
-  act _ (Dup m1 m2) MNone = Dup m1 m2
-  act _ (Dup m1 m2) (MLeft ma) = Dup (act (Proxy @u1) m1 ma) m2
-  act _ (Dup m1 m2) (MRight mb) = Dup m1 (act (Proxy @u2) m2 mb)
-  act _ _ MConflict = error "Inconsistent message"
+  upd _ (Dup m1 m2) MNone = Dup m1 m2
+  upd _ (Dup m1 m2) (MLeft ma) = Dup (upd (Proxy @u1) m1 ma) m2
+  upd _ (Dup m1 m2) (MRight mb) = Dup m1 (upd (Proxy @u2) m2 mb)
+  upd _ _ MConflict = error "Inconsistent message"
 
 data ULens u1 u2 =
   ULens { get    :: Model u1 -> Model u2,
@@ -205,10 +205,12 @@ dup (ElmApp l1 view1) (ElmApp l2 view2) =
   ElmApp (splitL l1 l2)
          (\(Dup a b) -> ProdV (fmap MLeft (view1 a)) (fmap MRight (view2 b)))
 
-product :: forall u1 uv1 v1 u2 uv2 v2. (UpdateStructure uv2, UpdateStructure uv1) => ElmApp u1 uv1 v1 -> ElmApp u2 uv2 v2 -> ElmApp (ProdU u1 u2) (ProdU uv1 uv2) (ProdV v1 v2)
+product :: forall u1 uv1 v1 u2 uv2 v2. (UpdateStructure uv2, UpdateStructure uv1) => 
+  ElmApp u1 uv1 v1 -> ElmApp u2 uv2 v2 -> ElmApp (ProdU u1 u2) (ProdU uv1 uv2) (ProdV v1 v2)
 product (ElmApp l1 view1) (ElmApp l2 view2) =
   ElmApp (productL l1 l2)
-         (\(a, b) -> ProdV (fmap (embFst (Proxy @uv1) (Proxy @uv2)) (view1 a)) (fmap (embSnd (Proxy @uv1) (Proxy @uv2)) (view2 b)))
+         (\(a, b) -> ProdV (fmap (embFst (Proxy @uv1) (Proxy @uv2)) (view1 a)) 
+                           (fmap (embSnd (Proxy @uv1) (Proxy @uv2)) (view2 b)))
 
 data ListU u
 
@@ -224,16 +226,16 @@ instance (Eq model, ElmlensMsg msg) => ElmlensMsg [ AtomicListMsg model msg ] wh
   checkFail _  = False
 
 -- For simplicity, we treat out-of-bound updates as identity updates
-actAtomicListMsg :: UpdateStructure u => Proxy u -> [ Model u ] -> AtomicListMsg (Model u) (Msg u) -> [ Model u ]
-actAtomicListMsg pu xs0 (ALRep i msg) = case splitAt i xs0 of
+updAtomicListMsg :: UpdateStructure u => Proxy u -> [ Model u ] -> AtomicListMsg (Model u) (Msg u) -> [ Model u ]
+updAtomicListMsg pu xs0 (ALRep i msg) = case splitAt i xs0 of
         (xs, [])   -> xs
-        (xs, y:ys) -> xs ++ act pu y msg : ys
-actAtomicListMsg _ xs0 (ALDel i) = case splitAt i xs0 of
+        (xs, y:ys) -> xs ++ upd pu y msg : ys
+updAtomicListMsg _ xs0 (ALDel i) = case splitAt i xs0 of
         (xs, [])   -> xs
         (xs, _:ys) -> xs ++ ys
-actAtomicListMsg _ xs0 (ALIns i a) = case splitAt i xs0 of
+updAtomicListMsg _ xs0 (ALIns i a) = case splitAt i xs0 of
         (xs, ys) -> xs ++ a : ys
-actAtomicListMsg _ xs0 (ALReorder f) = foldlWithKey (\ls key n -> case splitAt key ls of
+updAtomicListMsg _ xs0 (ALReorder f) = foldlWithKey (\ls key n -> case splitAt key ls of
         (xs, []) -> xs
         (xs, _:ys) -> xs ++ (xs0 !! n) : ys) xs0 f
 
@@ -241,7 +243,7 @@ instance UpdateStructure u => UpdateStructure (ListU u) where
   type Model (ListU u) = [ Model u ]
   type Msg (ListU u) = [ AtomicListMsg (Model u) (Msg u) ]
 
-  act _ = foldl (actAtomicListMsg (Proxy @u))
+  upd _ = foldl (updAtomicListMsg (Proxy @u))
 
 mapL :: forall u1 u2. UpdateStructure u1 => ULens u1 u2 -> ULens (ListU u1) (ListU u2)
 mapL l = ULens { get = map (get l), trans = tr, create = map (create l) }
@@ -249,7 +251,7 @@ mapL l = ULens { get = map (get l), trans = tr, create = map (create l) }
     tr :: Model (ListU u1) -> Msg (ListU u2) -> Msg (ListU u1)
     tr _ []         = mempty
     tr s (db : dbs) = let da = trA s db
-                      in da <> tr (act (Proxy @(ListU u1)) s da) dbs
+                      in da <> tr (upd (Proxy @(ListU u1)) s da) dbs
     trA :: Model (ListU u1) -> AtomicListMsg (Model u2) (Msg u2) -> Msg (ListU u1)
     trA _ (ALIns i a)   = [ALIns i (create l a)]
     trA _ (ALDel i)     = [ALDel i]
@@ -312,6 +314,6 @@ render (ElmApp l v) model mountPoint = App {
 }
   where
     update :: Msg u -> Model u -> Effect (Msg u) (Model u)
-    update = \m s -> noEff $ act (Proxy @u) s m
+    update = \m s -> noEff $ upd (Proxy @u) s m
     view :: Model u -> H.View (Msg u)
     view = \s -> (\(Html h) -> h) (fmap (trans l s) $ v (get l s))

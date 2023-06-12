@@ -56,12 +56,12 @@ instance UpdateStructure TaskInputU where
   type Model TaskInputU = (MisoString, Maybe MisoString)
   type Msg TaskInputU = [ EditMsg ]
 
-  act _ model [] = model
-  act pu (str, Nothing) (Focus : xs) = act pu (str, Just str) xs
-  act pu (str, Just edit) (Cancel : xs) = act pu (str, Nothing) xs
-  act pu (str, Just edit) (Commit : xs) = act pu (edit, Nothing) xs
-  act pu (str, Just _)    (Edit e : xs) = act pu (str, Just e) xs
-  act pu m (_ : xs) = act pu m xs -- Maybe runtime error?
+  upd _ model [] = model
+  upd pu (str, Nothing) (Focus : xs) = upd pu (str, Just str) xs
+  upd pu (str, Just edit) (Cancel : xs) = upd pu (str, Nothing) xs
+  upd pu (str, Just edit) (Commit : xs) = upd pu (edit, Nothing) xs
+  upd pu (str, Just _)    (Edit e : xs) = upd pu (str, Just e) xs
+  upd pu m (_ : xs) = upd pu m xs -- Maybe runtime error?
 
 taskInput :: ElmApp TaskInputU TaskInputU Html
 taskInput = fromView viewTask
@@ -190,7 +190,7 @@ instance forall u filterU. (UpdateStructure u, UpdateStructure filterU, FilterOp
   type Model (FilterListU filterU u) = (Model filterU, [ Model u ])
   type Msg (FilterListU filterU u) = [ AtomicListMsg (Model u) (Msg u) ]
 
-  act _ model msgs = (fst model, Data.List.filter (Todo.filter (Proxy @filterU) (Proxy @u) (fst model)) $ Data.List.foldl (actAtomicListMsg (Proxy @u)) (snd model) msgs)
+  upd _ model msgs = (fst model, Data.List.filter (Todo.filter (Proxy @filterU) (Proxy @u) (fst model)) $ Data.List.foldl (updAtomicListMsg (Proxy @u)) (snd model) msgs)
 
 filterL :: forall filterU u1 u2. UpdateStructure u1 => ULens u1 u2 -> ULens (FilterListU filterU u1) (FilterListU filterU u2)
 filterL l = ULens { get = second $ Data.List.map (get l), trans = tr . snd, create = second $ Data.List.map (create l) }
@@ -198,7 +198,7 @@ filterL l = ULens { get = second $ Data.List.map (get l), trans = tr . snd, crea
     tr :: Model (ListU u1) -> Msg (ListU u2) -> Msg (ListU u1)
     tr _ []         = mempty
     tr s (db : dbs) = let da = trA s db
-                      in da <> tr (act (Proxy @(ListU u1)) s da) dbs
+                      in da <> tr (upd (Proxy @(ListU u1)) s da) dbs
     trA :: Model (ListU u1) -> AtomicListMsg (Model u2) (Msg u2) -> Msg (ListU u1)
     trA _ (ALIns i a)   = [ALIns i (create l a)]
     trA _ (ALDel i)     = [ALDel i]
@@ -226,7 +226,7 @@ filterTaskL = ULens {
     tr :: Model (ProdU TaskFilterU (ListU (ProdU BoolU TaskInputU))) -> Msg (FilterListU TaskFilterU (ProdU BoolU TaskInputU)) ->Msg (ProdU TaskFilterU (ListU (ProdU BoolU TaskInputU)))
     tr (filter, _) [] = mempty
     tr (filter, s) (db : dbs) = let da = trA filter s db
-                                in (mempty, da) <> tr (filter, act (Proxy @(ListU (ProdU BoolU TaskInputU))) s da) dbs
+                                in (mempty, da) <> tr (filter, upd (Proxy @(ListU (ProdU BoolU TaskInputU))) s da) dbs
 
     trA :: Model TaskFilterU -> Model (ListU (ProdU BoolU TaskInputU)) -> AtomicListMsg (Model (ProdU BoolU TaskInputU)) (Msg (ProdU BoolU TaskInputU)) -> Msg (ListU (ProdU BoolU TaskInputU))
     trA DisplayAll _ msg = [msg]

@@ -107,7 +107,7 @@ instance UpdateStructure LabelU where
   type Model LabelU = MisoString
   type Msg LabelU = MisoString
 
-  act _ n m = n <> m
+  upd _ n m = n <> m
 
 buttonsConfig :: [(MisoString, MisoString, ULens (ProdU (RepU Int) (ProdU (RepU StdGen) (ListU (ProdU (RepU Int) LabelU)))) (UnitU (Sum Natural)))]
 buttonsConfig = [
