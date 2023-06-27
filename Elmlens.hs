@@ -298,11 +298,10 @@ conditional :: forall u uv1 uv2 v. (UpdateStructure u, UpdateStructure uv1, Upda
   -> ElmApp u uv1 v -> ElmApp u uv2 v -> ElmApp u (DupU u (DupU uv1 uv2)) v
 conditional predicate e1 e2 = vmap f $ dup eConditional $ dup e1 e2
   where
-    f :: View (ProdV (v :~> (v :~> v)) (ProdV v v)) msg -> View v msg
-    f (ProdV template (ProdV v1 v2)) = template <~| v1 <~| v2
-    eConditional :: ElmApp u u (v :~> (v :~> v))
-    eConditional = fromView $ \s -> Holed (\_ v1 -> 
-                                    Holed (\f' v2 -> if predicate s then fmap f' v1 else v2))
+    f :: View (ProdV (ProdV v v :~> v) (ProdV v v)) msg -> View v msg
+    f (ProdV template view) = template <~| view
+    eConditional :: ElmApp u u (ProdV v v :~> v)
+    eConditional = fromView $ \s -> Holed (\_ (ProdV v1 v2) -> if predicate s then v1 else v2)
     
 render :: forall u uv. UpdateStructure u => ElmApp u uv Html -> Model u -> Maybe MisoString -> App (Model u) (Msg u)
 render (ElmApp l v) model mountPoint = App {

@@ -157,6 +157,14 @@ filteredTasks =
                             (product taskFilterSwitch unfinishedTasks)
                             (product taskFilterSwitch finishedTasks)
 
+filteredTasks'' = 
+  dup (lmap (proj1L []) taskFilterSwitch)
+      (conditional (\(filter, _) -> filter == DisplayAll) 
+                   (lmap (proj2L DisplayAll) tasks)
+                 $ conditional (\(filter, _) -> filter == Doing)
+                               (lmap (proj2L Doing) unfinishedTasks)
+                               (lmap (proj2L Done) finishedTasks))
+                  
 todomvc = vmap f $ dup (lmap (productL id (proj2L DisplayAll)) newTask) (lmap (proj2L "") filteredTasks)
   where
     f :: View (ProdV Html (ProdV Html (ListV Html))) m -> View Html m

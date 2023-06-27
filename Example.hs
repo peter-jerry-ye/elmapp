@@ -7,16 +7,17 @@ import Data.Bifunctor (second, Bifunctor (first))
 import Miso
 import Data.Map (singleton)
 
--- type Counter = Int
--- type CounterMsg = Int
+type Counter = Int
+data CounterMsg = Increment | Decrement
 
--- update :: CounterMsg -> Counter -> Counter
--- update m i = i + m
--- view :: Counter -> View CounterMsg
--- view model = H.div_ [] [
---   H.button_ [ H.onClick 1 ] [ H.text "+" ],
---   H.label_ [] [ H.text $ (pack . show) model ],
---   H.button_ [ H.onClick (-1) ] [ H.text "-"] ]
+updateCounter :: CounterMsg -> Counter -> Counter
+updateCounter Increment i = i + 1
+updateCounter Decrement i = i - 1
+viewCounter :: Counter -> View CounterMsg
+viewCounter model = H.div_ [] [
+  H.button_ [ H.onClick Increment ] [ H.text "+" ],
+  H.label_ [] [ H.text $ (pack . show) model ],
+  H.button_ [ H.onClick Decrement ] [ H.text "-"] ]
 
 newtype Name = Name MisoString deriving Eq
 newtype NameMsg = ReplaceName MisoString
