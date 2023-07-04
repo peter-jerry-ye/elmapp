@@ -75,7 +75,9 @@ taskChecker = fromView (\b -> Html $ H.label_ [] [
   H.input_ [ H.type_ "checkbox", H.class_ "uk-checkbox", H.checked_ b, H.onChecked (\(Checked x) -> Replace x) ],
   text $ if b then " Done" else " Doing" ] )
 
-taskRow :: ElmApp (ProdU BoolU TaskInputU) (ProdU BoolU TaskInputU) (Html :~> Html)
+type TaskU = ProdU BoolU TaskInputU
+
+taskRow :: ElmApp TaskU TaskU (Html :~> Html)
 taskRow = vmap f (product taskChecker taskInput)
   where
     f :: View (ProdV Html Html) ~> View (Html :~> Html) 
@@ -87,9 +89,12 @@ taskRow = vmap f (product taskChecker taskInput)
 
 deleteButtons = fromView view
   where
-    view :: Model (ListU (ProdU BoolU TaskInputU)) -> View (ListV Html) (Msg (ListU (ProdU BoolU TaskInputU)))
+    view :: Model TaskListU -> View (ListV Html) (Msg TaskListU)
     view list = ListV $ Data.List.zipWith (\index _ -> Html $ H.button_ [ H.class_ "uk-button", H.class_ "uk-button-danger", H.onClick [ ALDel index ] ] [ H.text "Delete" ]) [0..] list
 
+type TaskListU = ListU TaskU
+type TaskListViewU = DupU TaskListU TaskListU
+tasks :: ElmApp TaskListU TaskListViewU (ListV Html)
 tasks = vmap f $ dup (list taskRow) deleteButtons
   where
     f :: View (ProdV (ListV (v :~> Html)) (ListV v)) ~> View (ListV Html)
@@ -121,8 +126,13 @@ themed = vmap f $ product theme todoWithoutFilter
     f :: View (ProdV (ListV Html :~> Html) (ListV Html)) ~> View Html
     f (ProdV template h) = template <~| h
 
+-- type FilteredTaskListViewU = DupU TaskListU TaskListViewU
+type FilteredTaskListViewU = FilteredListViewU TaskU TaskListViewU
+
+unfinishedTasks :: ElmApp TaskListU FilteredTaskListViewU (ListV Html)
 unfinishedTasks = filterE (not . fst) tasks
 
+finishedTasks :: ElmApp TaskListU FilteredTaskListViewU (ListV Html)
 finishedTasks = filterE fst tasks
 
 data TaskFilter = 
@@ -150,6 +160,12 @@ taskFilterSwitch = fromView view
         text " Done"
       ] ]
 
+type FilterAndTasksU = ProdU TaskFilterU TaskListU
+type FilterAndTasksViewU = 
+  ConditionalViewU FilterAndTasksU 
+    (ProdU TaskFilterU TaskListViewU)
+    (ConditionalViewU FilterAndTasksU (ProdU TaskFilterU FilteredTaskListViewU) (ProdU TaskFilterU FilteredTaskListViewU))
+filteredTasks :: ElmApp  FilterAndTasksU FilterAndTasksViewU (ProdV Html (ListV Html))
 filteredTasks = 
   conditional (\(filter, _) -> filter == DisplayAll)
               (product taskFilterSwitch tasks)
@@ -157,6 +173,14 @@ filteredTasks =
                             (product taskFilterSwitch unfinishedTasks)
                             (product taskFilterSwitch finishedTasks)
 
+type FilterAndTasksViewU' =
+  DupU TaskFilterU
+    (ConditionalViewU FilterAndTasksU
+      TaskListViewU
+      (ConditionalViewU FilterAndTasksU
+        FilteredTaskListViewU FilteredTaskListViewU))
+filteredTasks'' :: ElmApp FilterAndTasksU FilterAndTasksViewU'
+                  (ProdV Html (ListV Html))
 filteredTasks'' = 
   dup (lmap (proj1L []) taskFilterSwitch)
       (conditional (\(filter, _) -> filter == DisplayAll) 
@@ -164,8 +188,14 @@ filteredTasks'' =
                  $ conditional (\(filter, _) -> filter == Doing)
                                (lmap (proj2L Doing) unfinishedTasks)
                                (lmap (proj2L Done) finishedTasks))
+
+inputbox :: ElmApp TaskListU TaskListU Html
+inputbox = undefined
                   
-todomvc = vmap f $ dup (lmap (productL id (proj2L DisplayAll)) newTask) (lmap (proj2L "") filteredTasks)
+type TodoViewU = DupU TaskListU FilterAndTasksViewU
+todomvc :: ElmApp FilterAndTasksU TodoViewU Html
+todomvc = vmap f (dup (lmap (proj2L DisplayAll) inputbox) filteredTasks)
+-- todomvc = vmap f $ dup (lmap (productL id (proj2L DisplayAll)) newTask) (lmap (proj2L "") filteredTasks)
   where
     f :: View (ProdV Html (ProdV Html (ListV Html))) m -> View Html m
     f (ProdV (Html inputV) (ProdV (Html filterV) (ListV tasksV))) = 
@@ -176,13 +206,13 @@ themedTodoMVC = vmap f $ product theme todomvc
     f :: View (ProdV (ListV Html :~> Html) Html) ~> View Html
     f (ProdV template todo) = template <~| ListV [ todo ]
 
-todomvcapp = render todomvc ("", (DisplayAll, []))
+-- todomvcapp = render todomvc ("", (DisplayAll, []))
 
 -- todoWithoutFilterApp = render todoWithoutFilter ("", [])
 
 -- themedApp = render themed (False, ("", []))
 
-themedApp = render themedTodoMVC (False, ("", (DisplayAll, [])))
+-- themedApp = render themedTodoMVC (False, ("", (DisplayAll, [])))
 
 class (UpdateStructure filterU, UpdateStructure dataU) => FilterOperation filterU dataU where
   filter:: Proxy filterU -> Proxy dataU -> Model filterU -> Model dataU -> Bool
@@ -274,7 +304,7 @@ themedTodoMVC' = vmap f $ product theme todomvc
     f :: View (ProdV (ListV Html :~> Html) Html) ~> View Html
     f (ProdV template todo) = template <~| ListV [ todo ]
 
-todomvcapp' = render todomvc ("", (DisplayAll, []))
+-- todomvcapp' = render todomvc ("", (DisplayAll, []))
 
-themedApp' = render themedTodoMVC (False, ("", (DisplayAll, [])))
+-- themedApp' = render themedTodoMVC (False, ("", (DisplayAll, [])))
 

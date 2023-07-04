@@ -285,7 +285,9 @@ filterList predicate  = vmap' viewFilteredList
       (_xs1, xi : _xs2) -> ALRep xi da : f n ls dbs
     f n ls (ALReorder reorder : dbs) = ALReorder (fromList $ fmap (\(from, to) -> (ls !! from, ls !! to)) $ toList reorder) : f n ls dbs
 
-filterE :: forall u uv v. (UpdateStructure u, UpdateStructure uv) => (Model u -> Bool) -> ElmApp (ListU u) uv (ListV v) -> ElmApp (ListU u) (DupU (ListU u) uv) (ListV v)
+type FilteredListViewU u uv = DupU (ListU u) uv
+
+filterE :: forall u uv v. (UpdateStructure u, UpdateStructure uv) => (Model u -> Bool) -> ElmApp (ListU u) uv (ListV v) -> ElmApp (ListU u) (FilteredListViewU u uv) (ListV v)
 filterE predicate e = vmap f $ dup eFilter e
   where
     f :: View (ProdV (ListV v :~> ListV v) (ListV v)) msg -> View (ListV v) msg
@@ -293,9 +295,10 @@ filterE predicate e = vmap f $ dup eFilter e
     eFilter :: ElmApp (ListU u) (ListU u) (ListV v :~> ListV v)
     eFilter = fromView $ \ls -> Holed (\_ (ListV vs) -> ListV $ fmap fst $ filter (predicate . snd) $ zip vs ls)
     
+type ConditionalViewU u uv1 uv2 = DupU u (DupU uv1 uv2)
 
 conditional :: forall u uv1 uv2 v. (UpdateStructure u, UpdateStructure uv1, UpdateStructure uv2) => (Model u -> Bool)
-  -> ElmApp u uv1 v -> ElmApp u uv2 v -> ElmApp u (DupU u (DupU uv1 uv2)) v
+  -> ElmApp u uv1 v -> ElmApp u uv2 v -> ElmApp u (ConditionalViewU u uv1 uv2) v
 conditional predicate e1 e2 = vmap f $ dup eConditional $ dup e1 e2
   where
     f :: View (ProdV (ProdV v v :~> v) (ProdV v v)) msg -> View v msg
