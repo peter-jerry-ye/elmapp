@@ -98,10 +98,6 @@ generateRows amount lastId (rows, seed) = if amount == 0 then (rows, seed) else 
     noun = nouns !! in_
     newRows = rows ++ [ (id, unwords [adjective, colour, noun]) ]
 
-instance ElmlensMsg MisoString where
-  checkMempty = Miso.String.null
-  checkFail = const False
-    
 data LabelU
 instance UpdateStructure LabelU where
   type Model LabelU = MisoString

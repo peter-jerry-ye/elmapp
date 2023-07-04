@@ -21,8 +21,51 @@ module ElmlensProp where
 import           Data.Proxy       (Proxy (..))
 import           Data.Kind        (Type)
 import           Elmlens
+import Data.Semigroup (Sum)
+import Apps (ScratchMsg(Keep))
+import Miso.String (MisoString, null)
+import Todo (EditMsg)
 
-class (Semigroup (Mask u), UpdateStructure u) => MaskedUpdateStructure (u :: Type) where
+class (Eq m, Monoid m) => ElmlensMsg m where
+  checkMempty :: m -> Bool
+  checkFail   :: m -> Bool
+
+instance (ElmlensMsg ma, ElmlensMsg mb) => ElmlensMsg (DupMsg ma mb) where
+  checkMempty MNone = True
+  checkMempty _     = False
+  checkFail   MConflict = True
+  checkFail (MLeft ma)  | checkFail ma = True
+  checkFail (MRight mb) | checkFail mb = True
+  checkFail   _         = False
+
+instance (Eq model, ElmlensMsg msg) => ElmlensMsg [ AtomicListMsg model msg ] where
+  checkMempty [] = True
+  checkMempty _  = False
+  checkFail _  = False
+
+instance (ElmlensMsg m1, ElmlensMsg m2) => ElmlensMsg (m1, m2) where
+  checkMempty (m1, m2) = checkMempty m1 && checkMempty m2
+  checkFail (m1, m2) = checkFail m1 || checkFail m2
+
+instance (Eq a, Num a) => ElmlensMsg (Sum a) where
+  checkMempty s = s == mempty
+  checkFail _ = False
+
+instance Eq a => ElmlensMsg (ScratchMsg a) where
+  checkMempty Keep = True
+  checkMempty _    = False
+  checkFail _ = False
+
+instance ElmlensMsg MisoString where
+  checkMempty = Miso.String.null
+  checkFail = const False
+
+instance ElmlensMsg [ EditMsg ] where
+  checkMempty [] = True
+  checkMempty _  = False
+  checkFail _  = False
+
+class (ElmlensMsg (Msg u), Semigroup (Mask u), UpdateStructure u) => MaskedUpdateStructure (u :: Type) where
   type Mask u :: Type
   mask :: Proxy u -> Msg u -> Mask u
   eqv :: Proxy u -> Mask u -> Model u -> Model u -> Bool
@@ -57,12 +100,12 @@ instance (MaskedUpdateStructure u) => MaskedUpdateStructure (ListU u) where
   eqv _ (Just m) ms ms' = and (zipWith (eqv (Proxy @u) m) ms ms')
   eqv _ Nothing ms ms' = ms == ms'
 
-translateEmptyProp :: (UpdateStructure u1, UpdateStructure u2) => ULens u1 u2 -> Model u1 -> Bool
-translateEmptyProp lens model = checkMempty $ trans lens model mempty
+translateEmptyProp :: forall u1 u2. (UpdateStructure u1, MaskedUpdateStructure u2) => ULens u1 u2 -> Model u1 -> Bool
+translateEmptyProp lens model = mempty == trans lens model mempty
 
-translateCombineProp :: forall u1 u2. (UpdateStructure u1, UpdateStructure u2) => ULens u1 u2 -> Model u1 -> Msg u2 -> Msg u2 -> Bool
+translateCombineProp :: forall u1 u2. (UpdateStructure u1, MaskedUpdateStructure u2) => ULens u1 u2 -> Model u1 -> Msg u2 -> Msg u2 -> Bool
 translateCombineProp lens m1 msg2 msg2' = 
-  checkFail (msg1 <> msg1') || checkFail (msg2 <> msg2') || (msg1 <> msg1') == trans lens m1 (msg2 <> msg2')
+  checkFail (msg2 <> msg2') || (msg1 <> msg1') == trans lens m1 (msg2 <> msg2')
     where
       msg1 = trans lens m1 msg2
       msg1' = trans lens (upd (Proxy @u1) m1 msg1) msg2'

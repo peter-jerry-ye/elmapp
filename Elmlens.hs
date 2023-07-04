@@ -34,21 +34,14 @@ import           Miso             hiding (View)
 import qualified Miso.Html        as H
 import           Miso.String      (MisoString)
 
-class (Eq m, Monoid m) => ElmlensMsg m where
-  checkMempty :: m -> Bool
-  checkFail   :: m -> Bool
 
 -- Update Structure
-class (ElmlensMsg (Msg u), Eq (Model u)) => UpdateStructure (u :: Type) where
+class (Eq(Msg u), Monoid(Msg u), Eq (Model u)) => UpdateStructure (u :: Type) where
   type Model u :: Type
   type Msg u :: Type
   -- NB: data Proxy (u :: k) = Proxy
   -- is used to determine type u
   upd :: Proxy u -> Model u -> Msg u -> Model u
-
-instance (ElmlensMsg m1, ElmlensMsg m2) => ElmlensMsg (m1, m2) where
-  checkMempty (m1, m2) = checkMempty m1 && checkMempty m2
-  checkFail (m1, m2) = checkFail m1 || checkFail m2
 
 data ProdU u1 u2
 
@@ -70,30 +63,18 @@ data Dup a b = Dup a b deriving (Eq, Show)
 
 data DupMsg ma mb = MNone | MLeft ma | MRight mb | MConflict deriving (Eq, Show)
 
-instance (ElmlensMsg ma, ElmlensMsg mb) => Semigroup (DupMsg ma mb) where
+instance (Semigroup ma, Semigroup mb) => Semigroup (DupMsg ma mb) where
   MNone <> m = m
   m <> MNone = m
   MConflict <> _ = MConflict
   _ <> MConflict = MConflict
   MLeft ma <> MLeft ma' = MLeft $ ma <> ma'
   MRight mb <> MRight mb' = MRight $ mb <> mb'
-  MLeft ma <> MRight mb | checkMempty ma = MRight mb
-                        | checkMempty mb = MLeft ma
-                        | otherwise      = MConflict
-  MRight mb <> MLeft ma | checkMempty ma = MRight mb
-                        | checkMempty mb = MLeft ma
-                        | otherwise      = MConflict
+  MLeft _ <> MRight _ = MConflict
+  MRight _ <> MLeft _ = MConflict
 
-instance (ElmlensMsg ma, ElmlensMsg mb) => Monoid (DupMsg ma mb) where
+instance (Semigroup ma, Semigroup mb) => Monoid (DupMsg ma mb) where
   mempty = MNone
-
-instance (ElmlensMsg ma, ElmlensMsg mb) => ElmlensMsg (DupMsg ma mb) where
-  checkMempty MNone = True
-  checkMempty _     = False
-  checkFail   MConflict = True
-  checkFail (MLeft ma)  | checkFail ma = True
-  checkFail (MRight mb) | checkFail mb = True
-  checkFail   _         = False
 
 instance (UpdateStructure u1, UpdateStructure u2) => UpdateStructure (DupU u1 u2) where
   type Model (DupU u1 u2) = Dup (Model u1) (Model u2)
@@ -219,11 +200,6 @@ data AtomicListMsg model msg
   | ALDel Int
   | ALRep Int msg
   | ALReorder (IntMap Int) deriving (Eq, Show)
-
-instance (Eq model, ElmlensMsg msg) => ElmlensMsg [ AtomicListMsg model msg ] where
-  checkMempty [] = True
-  checkMempty _  = False
-  checkFail _  = False
 
 -- For simplicity, we treat out-of-bound updates as identity updates
 updAtomicListMsg :: UpdateStructure u => Proxy u -> [ Model u ] -> AtomicListMsg (Model u) (Msg u) -> [ Model u ]

@@ -47,11 +47,6 @@ data EditMsg =
   | Commit
   | Edit MisoString deriving (Eq, Show)
 
-instance ElmlensMsg [ EditMsg ] where
-  checkMempty [] = True
-  checkMempty _  = False
-  checkFail _  = False
-
 instance UpdateStructure TaskInputU where
   type Model TaskInputU = (MisoString, Maybe MisoString)
   type Msg TaskInputU = [ EditMsg ]
