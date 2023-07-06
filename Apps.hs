@@ -6,6 +6,7 @@
 module Apps where
 
 import Data.Kind        (Type)
+import Data.Proxy       (Proxy (..))
 import Control.Category (Category (..))
 import Miso hiding (View)
 import qualified Miso.Html as H
@@ -23,6 +24,17 @@ instance UpdateStructure IntU where
   type Msg IntU = Sum Int
 
   upd _ n (Sum m) = n + m
+
+data IntU'
+
+data IncDec = Incr | Decr deriving Eq
+
+instance UpdateStructure IntU' where
+  type Model IntU' = Int
+  type Msg IntU' = [ IncDec ]
+  upd _ n [] = n
+  upd u n (Incr:xs) = upd u (n+1) xs
+  upd u n (Decr:xs) = upd u (n-1) xs
 
 counter :: ElmApp IntU IntU Html
 counter = fromView (\x -> Html $ H.div_ [] [
@@ -50,6 +62,11 @@ instance (Eq a) => UpdateStructure (RepU a) where
 
   upd _ a Keep        = a
   upd _ _ (Replace a) = a
+
+type IntU'' = RepU Int
+
+-- value == (5, 1)
+value = upd (Proxy :: Proxy (ProdU IntU'' IntU'')) (1, 1) (Replace 5, Keep)
 
 type BoolU = RepU Bool
 
