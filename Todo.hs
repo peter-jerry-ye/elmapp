@@ -63,7 +63,7 @@ taskInput = fromView viewTask
   where
     viewTask :: Model TaskInputU -> View Html (Msg TaskInputU)
     viewTask (str, Nothing) = Html $ H.label_ [ H.onDoubleClick [ Focus ] ] [ H.text str ]
-    viewTask (str, Just ed) = Html $ H.input_ [ H.value_ ed, H.onInput $ \s -> [ Edit s ], H.onChange $ const [ Commit ], H.onKeyDown $ \(KeyCode code) -> [ Cancel | code == 27 ] ]
+    viewTask (str, Just ed) = Html $ H.input_ [ H.class_ "uk-input", H.value_ ed, H.onInput $ \s -> [ Edit s ], H.onChange $ const [ Commit ], H.onKeyDown $ \(KeyCode code) -> [ Cancel | code == 27 ] ]
 
 taskChecker :: ElmApp BoolU BoolU Html
 taskChecker = fromView (\b -> Html $ H.label_ [] [
@@ -184,13 +184,22 @@ filteredTasks'' =
                                (lmap (proj2L Doing) unfinishedTasks)
                                (lmap (proj2L Done) finishedTasks))
 
+-- This inputbox can not clear its content
 inputbox :: ElmApp TaskListU TaskListU Html
-inputbox = undefined
-                  
-type TodoViewU = DupU TaskListU FilterAndTasksViewU
-todomvc :: ElmApp FilterAndTasksU TodoViewU Html
-todomvc = vmap f (dup (lmap (proj2L DisplayAll) inputbox) filteredTasks)
--- todomvc = vmap f $ dup (lmap (productL id (proj2L DisplayAll)) newTask) (lmap (proj2L "") filteredTasks)
+inputbox = fromView (\ls -> 
+    Html $ H.div_ [ H.class_ "uk-width-1-1" ] [ H.input_ [ 
+      H.class_ "uk-input",
+      H.onChange $ \str -> [ ALIns (Prelude.length ls) (False, (str, Nothing)) ] ] ] )
+
+-- type TodoViewU = DupU TaskListU FilterAndTasksViewU
+-- todomvc :: ElmApp FilterAndTasksU TodoViewU Html
+-- todomvc = vmap f (dup (lmap (proj2L DisplayAll) inputbox) filteredTasks)
+--   where
+--     f :: View (ProdV Html (ProdV Html (ListV Html))) m -> View Html m
+--     f (ProdV (Html inputV) (ProdV (Html filterV) (ListV tasksV))) = 
+--         Html $ H.div_ [ H.class_ "uk-grid uk-width-1-2" ] $ [ inputV, filterV ] ++ fmap (\(Html v) -> v) tasksV
+
+todomvc = vmap f $ dup (lmap (productL id (proj2L DisplayAll)) newTask) (lmap (proj2L "") filteredTasks)
   where
     f :: View (ProdV Html (ProdV Html (ListV Html))) m -> View Html m
     f (ProdV (Html inputV) (ProdV (Html filterV) (ListV tasksV))) = 
@@ -301,5 +310,5 @@ themedTodoMVC' = vmap f $ product theme todomvc
 
 -- todomvcapp' = render todomvc ("", (DisplayAll, []))
 
--- themedApp' = render themedTodoMVC (False, ("", (DisplayAll, [])))
+themedApp' = render themedTodoMVC (False, ("", (DisplayAll, [])))
 
