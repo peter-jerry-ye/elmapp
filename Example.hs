@@ -7,6 +7,9 @@ import Data.Bifunctor (second, Bifunctor (first))
 import Miso
 import Data.Map (singleton)
 
+-- Implementation using plain MVU patter.
+-- Implementation with ElmApp can be found in Apps.hs
+
 type Counter = Int
 data CounterMsg = Increment | Decrement
 

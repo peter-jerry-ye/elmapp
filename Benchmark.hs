@@ -9,6 +9,9 @@
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TypeOperators              #-}
 
+-- The current implementation of Benchmark uses different data structure from the Benchbase,
+-- thus the comparaison can not be made
+
 module Benchmark where
 
 import Data.Kind        (Type)
@@ -142,8 +145,6 @@ buttonsConfig = [
     ULens { get = const (),
             trans = \(_, (_, ls)) (Sum m) -> if m == 0 then mempty else (mempty, (mempty, Prelude.replicate (fromIntegral m) $ ALReorder $ fromList [(1, 998), (998, 1)])),
             create = const (0, (mkStdGen 0, []))})]
-
--- TODO When a button is clicked multiple times, will the message be truncated into one?
 
 btnPrimaryBlock :: MisoString -> MisoString -> ElmApp (UnitU (Sum Natural)) (UnitU (Sum Natural)) Html
 btnPrimaryBlock buttonId label = fromView $ \_ -> Html $ 

@@ -184,13 +184,12 @@ filteredTasks'' =
                                (lmap (proj2L Doing) unfinishedTasks)
                                (lmap (proj2L Done) finishedTasks))
 
--- This inputbox can not clear its content
+-- This inputbox is the version appeared in the thesis, but it can not clear its content
 inputbox :: ElmApp TaskListU TaskListU Html
 inputbox = fromView (\ls -> 
     Html $ H.div_ [ H.class_ "uk-width-1-1" ] [ H.input_ [ 
       H.class_ "uk-input",
       H.onChange $ \str -> [ ALIns (Prelude.length ls) (False, (str, Nothing)) ] ] ] )
-
 -- type TodoViewU = DupU TaskListU FilterAndTasksViewU
 -- todomvc :: ElmApp FilterAndTasksU TodoViewU Html
 -- todomvc = vmap f (dup (lmap (proj2L DisplayAll) inputbox) filteredTasks)
@@ -198,6 +197,8 @@ inputbox = fromView (\ls ->
 --     f :: View (ProdV Html (ProdV Html (ListV Html))) m -> View Html m
 --     f (ProdV (Html inputV) (ProdV (Html filterV) (ListV tasksV))) = 
 --         Html $ H.div_ [ H.class_ "uk-grid uk-width-1-2" ] $ [ inputV, filterV ] ++ fmap (\(Html v) -> v) tasksV
+-- todomvcapp = render todomvc (DisplayAll, [])
+-- themedApp = render themedTodoMVC (False, (DisplayAll, []))
 
 todomvc = vmap f $ dup (lmap (productL id (proj2L DisplayAll)) newTask) (lmap (proj2L "") filteredTasks)
   where
@@ -210,13 +211,6 @@ themedTodoMVC = vmap f $ product theme todomvc
     f :: View (ProdV (ListV Html :~> Html) Html) ~> View Html
     f (ProdV template todo) = template <~| ListV [ todo ]
 
--- todomvcapp = render todomvc ("", (DisplayAll, []))
-
--- todoWithoutFilterApp = render todoWithoutFilter ("", [])
-
--- themedApp = render themed (False, ("", []))
-
--- themedApp = render themedTodoMVC (False, ("", (DisplayAll, [])))
 
 class (UpdateStructure filterU, UpdateStructure dataU) => FilterOperation filterU dataU where
   filter:: Proxy filterU -> Proxy dataU -> Model filterU -> Model dataU -> Bool
@@ -307,8 +301,6 @@ themedTodoMVC' = vmap f $ product theme todomvc
   where
     f :: View (ProdV (ListV Html :~> Html) Html) ~> View Html
     f (ProdV template todo) = template <~| ListV [ todo ]
-
--- todomvcapp' = render todomvc ("", (DisplayAll, []))
 
 themedApp' = render themedTodoMVC (False, ("", (DisplayAll, [])))
 
